@@ -38,6 +38,7 @@ public class BouyancyPlugin : ModuleRules
 				"Engine",
 				"Slate",
 				"SlateCore",
+				"Water",
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);
