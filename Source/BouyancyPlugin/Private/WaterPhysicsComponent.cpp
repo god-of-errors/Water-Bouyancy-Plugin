@@ -22,7 +22,7 @@ void UWaterPhysicsComponent::BeginPlay()
     }
     else if (!PhysicsComponent->IsSimulatingPhysics())
     {
-        UE_LOG(LogTemp, Warning, TEXT("Physics not enabled on %s - enable 'Simulate Physics'"), *PhysicsComponent->GetName());
+        UE_LOG(LogTemp, Warning, TEXT("Physics not enabled on %s"), *PhysicsComponent->GetName());
     }
     else
     {
@@ -34,7 +34,7 @@ void UWaterPhysicsComponent::TickComponent(float DeltaTime, ELevelTick TickType,
                                           FActorComponentTickFunction* ThisTickFunction)
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-    
+
     if (PhysicsComponent && PhysicsComponent->IsSimulatingPhysics())
     {
         ApplyBasicBuoyancy(DeltaTime);
@@ -54,7 +54,6 @@ void UWaterPhysicsComponent::ApplyBasicBuoyancy(float DeltaTime)
     if (ObjectLocation.Z < WaterHeight)
     {
         float SubmersionDepth = WaterHeight - ObjectLocation.Z;
-        
         float EffectiveRadius = ObjectRadius * 0.5f;
         
         float SubmergedVolume;
@@ -70,15 +69,27 @@ void UWaterPhysicsComponent::ApplyBasicBuoyancy(float DeltaTime)
         
         float ObjectMass = PhysicsComponent->GetMass();
         float WeightForce = ObjectMass * 980.0f;
+        
         float BuoyancyMultiplier = (SubmersionDepth / EffectiveRadius);
         BuoyancyMultiplier = FMath::Clamp(BuoyancyMultiplier, 0.0f, 2.0f);
+        
         float BuoyancyForceUE = WeightForce * BuoyancyMultiplier * BuoyancyForceMultiplier;
         FVector BuoyancyForce = FVector(0, 0, BuoyancyForceUE);
-        PhysicsComponent->AddForce(BuoyancyForce);
         
-        UE_LOG(LogTemp, Warning, TEXT("Buoyancy: Depth=%.1f, Mass=%.1f, Weight=%.1f, Force=%.1f, Multiplier=%.2f"), 
-               SubmersionDepth, ObjectMass, WeightForce, BuoyancyForceUE, BuoyancyMultiplier);
+        PhysicsComponent->AddForce(BuoyancyForce);
+        ApplyDampingForces(DeltaTime);
     }
+}
+
+void UWaterPhysicsComponent::ApplyDampingForces(float DeltaTime)
+{
+    FVector Velocity = PhysicsComponent->GetPhysicsLinearVelocity();
+    FVector LinearDampingForce = -Velocity * LinearDamping * PhysicsComponent->GetMass();
+    PhysicsComponent->AddForce(LinearDampingForce);
+    
+    FVector AngularVelocity = PhysicsComponent->GetPhysicsAngularVelocityInRadians();
+    FVector AngularDampingTorque = -AngularVelocity * AngularDamping;
+    PhysicsComponent->AddTorqueInRadians(AngularDampingTorque);
 }
 
 float UWaterPhysicsComponent::GetWaterHeightAtLocation(const FVector& WorldLocation)
@@ -123,9 +134,7 @@ void UWaterPhysicsComponent::DrawDebugInfo()
     if (WaterHeight > -99999.0f)
     {
         FVector WaterPoint = FVector(ObjectLocation.X, ObjectLocation.Y, WaterHeight);
-        
         DrawDebugSphere(GetWorld(), WaterPoint, 25.0f, 8, FColor::Blue, false, -1.0f, 0, 2.0f);
-        
         DrawDebugLine(GetWorld(), ObjectLocation, WaterPoint, FColor::Cyan, false, -1.0f, 0, 3.0f);
         
         float SubmersionDepth = WaterHeight - ObjectLocation.Z;
@@ -137,20 +146,28 @@ void UWaterPhysicsComponent::DrawDebugInfo()
             DrawDebugDirectionalArrow(GetWorld(), ObjectLocation, ForceArrow, 
                                     25.0f, FColor::Green, false, -1.0f, 0, 5.0f);
             
+            FVector Velocity = PhysicsComponent->GetPhysicsLinearVelocity();
+            if (Velocity.Size() > 10.0f)
+            {
+                FVector DampingArrow = ObjectLocation + (Velocity.GetSafeNormal() * -30.0f);
+                DrawDebugDirectionalArrow(GetWorld(), ObjectLocation, DampingArrow, 
+                                        15.0f, FColor::Orange, false, -1.0f, 0, 3.0f);
+            }
+            
             DrawDebugString(GetWorld(), TextPosition, 
-                           FString::Printf(TEXT("BUOYANCY APPLIED: %.1fcm deep"), SubmersionDepth), 
-                           nullptr, FColor::Green, .05f, true);
+                           FString::Printf(TEXT("BUOYANCY + DAMPING: %.1fcm deep"), SubmersionDepth), 
+                           nullptr, FColor::Green, 1.0f, true);
         }
         else
         {
             DrawDebugString(GetWorld(), TextPosition, 
                            FString::Printf(TEXT("ABOVE WATER: %.1fcm"), FMath::Abs(SubmersionDepth)), 
-                           nullptr, FColor::Orange, .05f, true);
+                           nullptr, FColor::Orange, 1.0f, true);
         }
     }
     else
     {
         DrawDebugString(GetWorld(), ObjectLocation + FVector(0, 0, 80), 
-                       TEXT("NO WATER DETECTED"), nullptr, FColor::Red, .05f, true);
+                       TEXT("NO WATER DETECTED"), nullptr, FColor::Red, 1.0f, true);
     }
 }
