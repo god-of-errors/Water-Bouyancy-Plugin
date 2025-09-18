@@ -1,4 +1,3 @@
-
 #include "WaterPhysicsComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "DrawDebugHelpers.h"
@@ -56,22 +55,29 @@ void UWaterPhysicsComponent::ApplyBasicBuoyancy(float DeltaTime)
     {
         float SubmersionDepth = WaterHeight - ObjectLocation.Z;
         
+        float EffectiveRadius = ObjectRadius * 0.5f;
+        
         float SubmergedVolume;
-        if (SubmersionDepth >= ObjectRadius * 2.0f)
+        if (SubmersionDepth >= EffectiveRadius * 2.0f)
         {
-            SubmergedVolume = (4.0f/3.0f) * PI * FMath::Pow(ObjectRadius, 3);
+            SubmergedVolume = (4.0f/3.0f) * PI * FMath::Pow(EffectiveRadius, 3);
         }
         else
         {
-            float h = FMath::Min(SubmersionDepth, ObjectRadius * 2.0f);
-            SubmergedVolume = PI * h * h * (3.0f * ObjectRadius - h) / 3.0f;
+            float h = FMath::Min(SubmersionDepth, EffectiveRadius * 2.0f);
+            SubmergedVolume = PI * h * h * (3.0f * EffectiveRadius - h) / 3.0f;
         }
         
-        // Archimedes' Principle: F = ρ * V * g
-        float BuoyancyForceMagnitude = WaterDensity * SubmergedVolume * 980.0f * BuoyancyForceMultiplier;
-        FVector BuoyancyForce = FVector(0, 0, BuoyancyForceMagnitude);
-        
+        float ObjectMass = PhysicsComponent->GetMass();
+        float WeightForce = ObjectMass * 980.0f;
+        float BuoyancyMultiplier = (SubmersionDepth / EffectiveRadius);
+        BuoyancyMultiplier = FMath::Clamp(BuoyancyMultiplier, 0.0f, 2.0f);
+        float BuoyancyForceUE = WeightForce * BuoyancyMultiplier * BuoyancyForceMultiplier;
+        FVector BuoyancyForce = FVector(0, 0, BuoyancyForceUE);
         PhysicsComponent->AddForce(BuoyancyForce);
+        
+        UE_LOG(LogTemp, Warning, TEXT("Buoyancy: Depth=%.1f, Mass=%.1f, Weight=%.1f, Force=%.1f, Multiplier=%.2f"), 
+               SubmersionDepth, ObjectMass, WeightForce, BuoyancyForceUE, BuoyancyMultiplier);
     }
 }
 
@@ -102,7 +108,7 @@ float UWaterPhysicsComponent::GetWaterHeightAtLocation(const FVector& WorldLocat
         }
     }
     
-    return -99999.0f; 
+    return -99999.0f;
 }
 
 void UWaterPhysicsComponent::DrawDebugInfo()
@@ -127,25 +133,24 @@ void UWaterPhysicsComponent::DrawDebugInfo()
         
         if (SubmersionDepth > 0)
         {
-            // Show buoyancy force with green arrow
             FVector ForceArrow = ObjectLocation + FVector(0, 0, 50);
             DrawDebugDirectionalArrow(GetWorld(), ObjectLocation, ForceArrow, 
                                     25.0f, FColor::Green, false, -1.0f, 0, 5.0f);
             
             DrawDebugString(GetWorld(), TextPosition, 
                            FString::Printf(TEXT("BUOYANCY APPLIED: %.1fcm deep"), SubmersionDepth), 
-                           nullptr, FColor::Green, 1.0f, true);
+                           nullptr, FColor::Green, .05f, true);
         }
         else
         {
             DrawDebugString(GetWorld(), TextPosition, 
                            FString::Printf(TEXT("ABOVE WATER: %.1fcm"), FMath::Abs(SubmersionDepth)), 
-                           nullptr, FColor::Orange, 1.0f, true);
+                           nullptr, FColor::Orange, .05f, true);
         }
     }
     else
     {
         DrawDebugString(GetWorld(), ObjectLocation + FVector(0, 0, 80), 
-                       TEXT("NO WATER DETECTED"), nullptr, FColor::Red, 1.0f, true);
+                       TEXT("NO WATER DETECTED"), nullptr, FColor::Red, .05f, true);
     }
 }
