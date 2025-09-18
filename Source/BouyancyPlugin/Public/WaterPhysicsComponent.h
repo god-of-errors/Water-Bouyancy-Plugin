@@ -20,9 +20,8 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, 
 							  FActorComponentTickFunction* ThisTickFunction) override;
-
+	
 public:
-	// STEP 2: Basic buoyancy settings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basic Buoyancy")
 	float WaterDensity = 1000.0f;
     
@@ -32,6 +31,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basic Buoyancy")
 	float ObjectRadius = 100.0f;
     
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damping")
+	float LinearDamping = 0.1f;
+    
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damping")
+	float AngularDamping = 0.05f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
 	bool bShowDebug = true;
 
@@ -39,8 +44,8 @@ private:
 	UPROPERTY()
 	UPrimitiveComponent* PhysicsComponent;
     
-	// STEP 2 FUNCTIONS
 	void ApplyBasicBuoyancy(float DeltaTime);
+	void ApplyDampingForces(float DeltaTime);
 	float GetWaterHeightAtLocation(const FVector& WorldLocation);
 	void DrawDebugInfo();
 };
