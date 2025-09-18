@@ -26,6 +26,7 @@ public class BouyancyPlugin : ModuleRules
 			new string[]
 			{
 				"Core",
+				"Water",
 				// ... add other public dependencies that you statically link with here ...
 			}
 			);
@@ -38,7 +39,6 @@ public class BouyancyPlugin : ModuleRules
 				"Engine",
 				"Slate",
 				"SlateCore",
-				"Water",
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);
