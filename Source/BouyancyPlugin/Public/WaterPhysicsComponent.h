@@ -22,25 +22,25 @@ protected:
 							  FActorComponentTickFunction* ThisTickFunction) override;
 
 public:
-	// ENHANCED DEBUG - Comprehensive water detection info
+	// STEP 2: Basic buoyancy settings
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basic Buoyancy")
+	float WaterDensity = 1000.0f;
+    
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basic Buoyancy")
+	float BuoyancyForceMultiplier = 1.0f;
+    
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basic Buoyancy")
+	float ObjectRadius = 100.0f;
+    
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
 	bool bShowDebug = true;
-    
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
-	bool bShowDetailedLogs = true;
-    
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
-	bool bShowWaterBodyInfo = true;
 
 private:
 	UPROPERTY()
 	UPrimitiveComponent* PhysicsComponent;
     
-	// Enhanced water detection
+	// STEP 2 FUNCTIONS
+	void ApplyBasicBuoyancy(float DeltaTime);
 	float GetWaterHeightAtLocation(const FVector& WorldLocation);
 	void DrawDebugInfo();
-	void LogWaterSystemStatus();
-	void DrawWaterBodyBounds();
-	void DisplayWaterBodyInfoAtLocation(const FVector& BasePosition, int32& CurrentLine, const FVector& QueryLocation);
-	void DisplayWorldWaterScan(const FVector& BasePosition, int32& CurrentLine);
 };
