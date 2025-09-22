@@ -49,7 +49,7 @@ void UWaterPhysicsComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 void UWaterPhysicsComponent::ApplyBasicBuoyancy(float DeltaTime)
 {
     FVector ObjectLocation = GetOwner()->GetActorLocation();
-    float WaterHeight = GetWaterHeightAtLocation(ObjectLocation);
+    float WaterHeight = SampleWaveHeightAtLocation(ObjectLocation);
     
     if (ObjectLocation.Z < WaterHeight)
     {
@@ -90,6 +90,41 @@ void UWaterPhysicsComponent::ApplyDampingForces(float DeltaTime)
     FVector AngularVelocity = PhysicsComponent->GetPhysicsAngularVelocityInRadians();
     FVector AngularDampingTorque = -AngularVelocity * AngularDamping;
     PhysicsComponent->AddTorqueInRadians(AngularDampingTorque);
+}
+
+float UWaterPhysicsComponent::SampleWaveHeightAtLocation(const FVector& WorldLocation)
+{
+    if (!GetWorld()) return -99999.0f;
+    
+    for (TActorIterator<AWaterBody> WaterBodyIterator(GetWorld()); WaterBodyIterator; ++WaterBodyIterator)
+    {
+        AWaterBody* WaterBody = *WaterBodyIterator;
+        if (WaterBody)
+        {
+            float BaseWaterHeight = GetWaterHeightAtLocation(WorldLocation);
+            
+            if (bUseWavePhysics && WaterBody->GetWaterWaves())
+            {
+                UWaterWavesBase* WaterWaves = WaterBody->GetWaterWaves();
+                float WaterDepth = 100.0f;
+                float CurrentTime = GetWorld()->GetTimeSeconds();
+                
+                float WaveDisplacement = WaterWaves->GetSimpleWaveHeightAtPosition(
+                    WorldLocation,
+                    WaterDepth,
+                    CurrentTime
+                );
+                
+                return BaseWaterHeight + WaveDisplacement;
+            }
+            else
+            {
+                return BaseWaterHeight;
+            }
+        }
+    }
+    
+    return -99999.0f;
 }
 
 float UWaterPhysicsComponent::GetWaterHeightAtLocation(const FVector& WorldLocation)
@@ -154,20 +189,32 @@ void UWaterPhysicsComponent::DrawDebugInfo()
                                         15.0f, FColor::Orange, false, -1.0f, 0, 3.0f);
             }
             
+            float WaveHeight = SampleWaveHeightAtLocation(ObjectLocation);
+            float BaseHeight = GetWaterHeightAtLocation(ObjectLocation);
+            float WaveDisplacement = WaveHeight - BaseHeight;
+            
+            if (FMath::Abs(WaveDisplacement) > 1.0f)
+            {
+                FColor WaveColor = WaveDisplacement > 0 ? FColor::Purple : FColor::Magenta;
+                FVector WaveArrow = ObjectLocation + FVector(0, 0, WaveDisplacement > 0 ? 30 : -30);
+                DrawDebugDirectionalArrow(GetWorld(), ObjectLocation, WaveArrow, 
+                                        10.0f, WaveColor, false, -1.0f, 0, 2.0f);
+            }
+            
             DrawDebugString(GetWorld(), TextPosition, 
-                           FString::Printf(TEXT("BUOYANCY + DAMPING: %.1fcm deep"), SubmersionDepth), 
-                           nullptr, FColor::Green, 1.0f, true);
+                           FString::Printf(TEXT("BUOYANCY + WAVES: %.1fcm deep"), SubmersionDepth), 
+                           nullptr, FColor::Green, -1.0f, true);
         }
         else
         {
             DrawDebugString(GetWorld(), TextPosition, 
                            FString::Printf(TEXT("ABOVE WATER: %.1fcm"), FMath::Abs(SubmersionDepth)), 
-                           nullptr, FColor::Orange, 1.0f, true);
+                           nullptr, FColor::Orange, -1.0f, true);
         }
     }
     else
     {
         DrawDebugString(GetWorld(), ObjectLocation + FVector(0, 0, 80), 
-                       TEXT("NO WATER DETECTED"), nullptr, FColor::Red, 1.0f, true);
+                       TEXT("NO WATER DETECTED"), nullptr, FColor::Red, -1.0f, true);
     }
 }
