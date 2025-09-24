@@ -43,12 +43,25 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
 	bool bShowDebug = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Collision Buoyancy")
+	bool bAutoGeneratePoints = true;
+    
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Collision Buoyancy")
+	int32 PointsPerAxis = 3;
+
 private:
 	UPROPERTY()
 	UPrimitiveComponent* PhysicsComponent;
-    
-	void ApplyBasicBuoyancy(float DeltaTime);
+
+	UPROPERTY()
+	TArray<FVector> BuoyancyPoints;
+	
+	void SinglePointBouyancy(float DeltaTime);
+	void MultiPointBouyancy(float DeltaTime);
+	void ApplyBuoyancy(float DeltaTime);
 	void ApplyDampingForces(float DeltaTime);
+	void GenerateBuoyancyPoints();
+	void GenerateBoxBuoyancyPoints();
 	float GetWaterHeightAtLocation(const FVector& WorldLocation);
 	float SampleWaveHeightAtLocation(const FVector& WorldLocation);
 	void DrawDebugInfo();

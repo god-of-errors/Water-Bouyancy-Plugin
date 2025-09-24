@@ -2,6 +2,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "DrawDebugHelpers.h"
 #include "EngineUtils.h"
+#include "Components/BoxComponent.h"
 #include "Engine/Engine.h"
 
 UWaterPhysicsComponent::UWaterPhysicsComponent()
@@ -27,6 +28,11 @@ void UWaterPhysicsComponent::BeginPlay()
     else
     {
         UE_LOG(LogTemp, Warning, TEXT("Water Physics ready on %s"), *GetOwner()->GetName());
+
+        if (bAutoGeneratePoints)
+        {
+            GenerateBuoyancyPoints();
+        }
     }
 }
 
@@ -37,7 +43,7 @@ void UWaterPhysicsComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 
     if (PhysicsComponent && PhysicsComponent->IsSimulatingPhysics())
     {
-        ApplyBasicBuoyancy(DeltaTime);
+        ApplyBuoyancy(DeltaTime);
     }
     
     if (bShowDebug)
@@ -46,7 +52,20 @@ void UWaterPhysicsComponent::TickComponent(float DeltaTime, ELevelTick TickType,
     }
 }
 
-void UWaterPhysicsComponent::ApplyBasicBuoyancy(float DeltaTime)
+void UWaterPhysicsComponent::ApplyBuoyancy(float DeltaTime)
+{
+    if (bAutoGeneratePoints && BuoyancyPoints.Num() > 0)
+    {
+        MultiPointBouyancy(DeltaTime);
+    }
+    else
+    {
+        SinglePointBouyancy(DeltaTime);
+    }
+}
+
+
+void UWaterPhysicsComponent::SinglePointBouyancy(float DeltaTime)
 {
     FVector ObjectLocation = GetOwner()->GetActorLocation();
     float WaterHeight = SampleWaveHeightAtLocation(ObjectLocation);
@@ -81,6 +100,44 @@ void UWaterPhysicsComponent::ApplyBasicBuoyancy(float DeltaTime)
     }
 }
 
+void UWaterPhysicsComponent::MultiPointBouyancy(float DeltaTime)
+{
+    for (const FVector& LocalPoint : BuoyancyPoints)
+    {
+        FVector WorldPoint = GetOwner()->GetTransform().TransformPosition(LocalPoint);
+        float WaterHeight = SampleWaveHeightAtLocation(WorldPoint);
+            
+        if (WorldPoint.Z < WaterHeight)
+        {
+            float SubmersionDepth = WaterHeight - WorldPoint.Z;
+                
+            // Calculate cubic volume for each point instead of spherical
+            FVector BoxExtent;
+            if (UBoxComponent* BoxComp = Cast<UBoxComponent>(PhysicsComponent))
+            {
+                BoxExtent = BoxComp->GetUnscaledBoxExtent();
+            }
+            else
+            {
+                BoxExtent = FVector(ObjectRadius, ObjectRadius, ObjectRadius);
+            }
+                
+            // Volume per point (divide box into grid)
+            float PointSizeX = (BoxExtent.X * 2.0f) / PointsPerAxis;
+            float PointSizeY = (BoxExtent.Y * 2.0f) / PointsPerAxis;
+            float PointSizeZ = (BoxExtent.Z * 2.0f) / PointsPerAxis;
+                
+            // Calculate submerged portion of this cubic point
+            float SubmergedHeight = FMath::Min(SubmersionDepth, PointSizeZ);
+            float SubmergedVolume = PointSizeX * PointSizeY * SubmergedHeight;
+                
+            float BuoyancyForce = WaterDensity * SubmergedVolume * 980.0f * BuoyancyForceMultiplier;
+            PhysicsComponent->AddForceAtLocation(FVector(0, 0, BuoyancyForce), WorldPoint);
+        }
+    }
+    ApplyDampingForces(DeltaTime);
+}
+
 void UWaterPhysicsComponent::ApplyDampingForces(float DeltaTime)
 {
     FVector Velocity = PhysicsComponent->GetPhysicsLinearVelocity();
@@ -90,6 +147,52 @@ void UWaterPhysicsComponent::ApplyDampingForces(float DeltaTime)
     FVector AngularVelocity = PhysicsComponent->GetPhysicsAngularVelocityInRadians();
     FVector AngularDampingTorque = -AngularVelocity * AngularDamping;
     PhysicsComponent->AddTorqueInRadians(AngularDampingTorque);
+}
+
+void UWaterPhysicsComponent::GenerateBuoyancyPoints()
+{
+    BuoyancyPoints.Empty();
+    
+    if (UBoxComponent* BoxComp = Cast<UBoxComponent>(PhysicsComponent))
+    {
+        GenerateBoxBuoyancyPoints();
+        UE_LOG(LogTemp, Warning, TEXT("Generated %d bouyancy points for box collider on %s"), BuoyancyPoints.Num(), *GetOwner()->GetName());
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Non-box collider detected on %s usig single-point buoyancy"), *GetOwner()->GetName());
+    }
+}
+
+void UWaterPhysicsComponent::GenerateBoxBuoyancyPoints()
+{
+    FVector BoxExtent;
+    
+    if (UBoxComponent* BoxComp = Cast<UBoxComponent>(PhysicsComponent))
+    {
+        BoxExtent = BoxComp->GetUnscaledBoxExtent();
+    }
+    else
+    {
+        return;
+    }
+    
+    for (int32 X = 0; X < PointsPerAxis; X++)
+    {
+        for (int32 Y = 0; Y < PointsPerAxis; Y++)
+        {
+            for (int32 Z = 0; Z < PointsPerAxis; Z++)
+            {
+                FVector LocalPosition = FVector(
+                    BoxExtent.X * (2.0f * X / (PointsPerAxis - 1) - 1.0f),
+                    BoxExtent.Y * (2.0f * Y / (PointsPerAxis - 1) - 1.0f),
+                    BoxExtent.Z * (2.0f * Z / (PointsPerAxis - 1) - 1.0f)
+                );
+                
+                BuoyancyPoints.Add(LocalPosition);
+            }
+        }
+    }
 }
 
 float UWaterPhysicsComponent::SampleWaveHeightAtLocation(const FVector& WorldLocation)
