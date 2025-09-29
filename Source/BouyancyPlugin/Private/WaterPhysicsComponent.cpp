@@ -15,7 +15,28 @@ void UWaterPhysicsComponent::BeginPlay()
 {
     Super::BeginPlay();
     
-    PhysicsComponent = GetOwner()->FindComponentByClass<UPrimitiveComponent>();
+    // Simple and reliable component detection
+    UBoxComponent* BoxComp = GetOwner()->FindComponentByClass<UBoxComponent>();
+    
+    if (BoxComp)
+    {
+        PhysicsComponent = BoxComp;
+        UE_LOG(LogTemp, Warning, TEXT("Found BoxComponent: %s"), *BoxComp->GetName());
+        
+        if (!BoxComp->IsSimulatingPhysics())
+        {
+            UE_LOG(LogTemp, Error, TEXT("Physics not enabled on BoxComponent - enable 'Simulate Physics' on the Box component"));
+        }
+    }
+    else
+    {
+        // Fallback to any primitive component
+        PhysicsComponent = GetOwner()->FindComponentByClass<UPrimitiveComponent>();
+        if (PhysicsComponent)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("No BoxComponent found, using: %s"), *PhysicsComponent->GetClass()->GetName());
+        }
+    }
     
     if (!PhysicsComponent)
     {
@@ -28,6 +49,7 @@ void UWaterPhysicsComponent::BeginPlay()
     else
     {
         UE_LOG(LogTemp, Warning, TEXT("Water Physics ready on %s"), *GetOwner()->GetName());
+        UE_LOG(LogTemp, Warning, TEXT("Using component type: %s"), *PhysicsComponent->GetClass()->GetName());
 
         if (bAutoGeneratePoints)
         {
@@ -265,59 +287,74 @@ void UWaterPhysicsComponent::DrawDebugInfo()
     if (!GetWorld()) return;
     
     FVector ObjectLocation = GetOwner()->GetActorLocation();
+    
+    // DEBUG: Show box collider bounds and properties
+    if (UBoxComponent* BoxComp = Cast<UBoxComponent>(PhysicsComponent))
+    {
+        FVector BoxExtent = BoxComp->GetUnscaledBoxExtent();
+        FVector BoxCenter = BoxComp->GetComponentLocation();
+        FQuat BoxRotation = BoxComp->GetComponentQuat();
+        
+        // Draw the box collider wireframe
+        DrawDebugBox(GetWorld(), BoxCenter, BoxExtent, BoxRotation, FColor::Yellow, false, -1.0f, 0, 3.0f);
+        
+        // Show box dimensions
+        DrawDebugString(GetWorld(), BoxCenter + FVector(0, 0, BoxExtent.Z + 20), 
+                       FString::Printf(TEXT("BOX: %.1fx%.1fx%.1f"), BoxExtent.X*2, BoxExtent.Y*2, BoxExtent.Z*2), 
+                       nullptr, FColor::Yellow, -1.0f, true);
+        
+        // Show physics status
+        FString PhysicsStatus = BoxComp->IsSimulatingPhysics() ? TEXT("PHYSICS: ON") : TEXT("PHYSICS: OFF");
+        FColor PhysicsColor = BoxComp->IsSimulatingPhysics() ? FColor::Green : FColor::Red;
+        DrawDebugString(GetWorld(), BoxCenter + FVector(0, 0, BoxExtent.Z + 40), 
+                       PhysicsStatus, nullptr, PhysicsColor, -1.0f, true);
+        
+        // Show mass
+        float Mass = BoxComp->GetMass();
+        DrawDebugString(GetWorld(), BoxCenter + FVector(0, 0, BoxExtent.Z + 60), 
+                       FString::Printf(TEXT("MASS: %.1f kg"), Mass), 
+                       nullptr, FColor::White, -1.0f, true);
+    }
+    
+    // Show buoyancy points if they exist
+    if (bAutoGeneratePoints && BuoyancyPoints.Num() > 0)
+    {
+        for (const FVector& LocalPoint : BuoyancyPoints)
+        {
+            FVector WorldPoint = GetOwner()->GetTransform().TransformPosition(LocalPoint);
+            float PointWaterHeight = SampleWaveHeightAtLocation(WorldPoint);
+            
+            // Color code: Green = underwater, Orange = above water
+            FColor PointColor = (WorldPoint.Z < PointWaterHeight) ? FColor::Green : FColor::Orange;
+            DrawDebugSphere(GetWorld(), WorldPoint, 8.0f, 8, PointColor, false, -1.0f, 0, 2.0f);
+            
+            // Show water line for underwater points
+            if (WorldPoint.Z < PointWaterHeight)
+            {
+                FVector WaterSurface = FVector(WorldPoint.X, WorldPoint.Y, PointWaterHeight);
+                DrawDebugLine(GetWorld(), WorldPoint, WaterSurface, FColor::Cyan, false, -1.0f, 0, 1.0f);
+            }
+        }
+        
+        // Show total point count
+        DrawDebugString(GetWorld(), ObjectLocation + FVector(0, 0, 100), 
+                       FString::Printf(TEXT("BUOYANCY POINTS: %d"), BuoyancyPoints.Num()), 
+                       nullptr, FColor::Cyan, -1.0f, true);
+    }
+    
+    // Existing water detection code...
     float WaterHeight = GetWaterHeightAtLocation(ObjectLocation);
-    
-    DrawDebugSphere(GetWorld(), ObjectLocation, 15.0f, 12, FColor::Red, false, -1.0f, 0, 3.0f);
-    
     if (WaterHeight > -99999.0f)
     {
         FVector WaterPoint = FVector(ObjectLocation.X, ObjectLocation.Y, WaterHeight);
         DrawDebugSphere(GetWorld(), WaterPoint, 25.0f, 8, FColor::Blue, false, -1.0f, 0, 2.0f);
-        DrawDebugLine(GetWorld(), ObjectLocation, WaterPoint, FColor::Cyan, false, -1.0f, 0, 3.0f);
         
         float SubmersionDepth = WaterHeight - ObjectLocation.Z;
-        FVector TextPosition = ObjectLocation + FVector(0, 0, 80);
-        
-        if (SubmersionDepth > 0)
-        {
-            FVector ForceArrow = ObjectLocation + FVector(0, 0, 50);
-            DrawDebugDirectionalArrow(GetWorld(), ObjectLocation, ForceArrow, 
-                                    25.0f, FColor::Green, false, -1.0f, 0, 5.0f);
-            
-            FVector Velocity = PhysicsComponent->GetPhysicsLinearVelocity();
-            if (Velocity.Size() > 10.0f)
-            {
-                FVector DampingArrow = ObjectLocation + (Velocity.GetSafeNormal() * -30.0f);
-                DrawDebugDirectionalArrow(GetWorld(), ObjectLocation, DampingArrow, 
-                                        15.0f, FColor::Orange, false, -1.0f, 0, 3.0f);
-            }
-            
-            float WaveHeight = SampleWaveHeightAtLocation(ObjectLocation);
-            float BaseHeight = GetWaterHeightAtLocation(ObjectLocation);
-            float WaveDisplacement = WaveHeight - BaseHeight;
-            
-            if (FMath::Abs(WaveDisplacement) > 1.0f)
-            {
-                FColor WaveColor = WaveDisplacement > 0 ? FColor::Purple : FColor::Magenta;
-                FVector WaveArrow = ObjectLocation + FVector(0, 0, WaveDisplacement > 0 ? 30 : -30);
-                DrawDebugDirectionalArrow(GetWorld(), ObjectLocation, WaveArrow, 
-                                        10.0f, WaveColor, false, -1.0f, 0, 2.0f);
-            }
-            
-            DrawDebugString(GetWorld(), TextPosition, 
-                           FString::Printf(TEXT("BUOYANCY + WAVES: %.1fcm deep"), SubmersionDepth), 
-                           nullptr, FColor::Green, -1.0f, true);
-        }
-        else
-        {
-            DrawDebugString(GetWorld(), TextPosition, 
-                           FString::Printf(TEXT("ABOVE WATER: %.1fcm"), FMath::Abs(SubmersionDepth)), 
-                           nullptr, FColor::Orange, -1.0f, true);
-        }
+        DrawDebugString(GetWorld(), ObjectLocation + FVector(0, 0, 120), 
+                       FString::Printf(TEXT("SUBMERSION: %.1fcm"), SubmersionDepth), 
+                       nullptr, SubmersionDepth > 0 ? FColor::Green : FColor::Orange, -1.0f, true);
     }
-    else
-    {
-        DrawDebugString(GetWorld(), ObjectLocation + FVector(0, 0, 80), 
-                       TEXT("NO WATER DETECTED"), nullptr, FColor::Red, -1.0f, true);
-    }
+    
+    // Show object center
+    DrawDebugSphere(GetWorld(), ObjectLocation, 15.0f, 12, FColor::Red, false, -1.0f, 0, 3.0f);
 }
