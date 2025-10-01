@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Components/PrimitiveComponent.h"
+#include "Components/BoxComponent.h"
 #include "WaterBodyActor.h"
 #include "WaterBodyComponent.h"
 #include "Engine/World.h"
@@ -22,47 +23,34 @@ protected:
 							  FActorComponentTickFunction* ThisTickFunction) override;
 
 public:
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basic Buoyancy")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Buoyancy")
 	float WaterDensity = 1000.0f;
     
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basic Buoyancy")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Buoyancy")
 	float BuoyancyForceMultiplier = 1.0f;
     
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basic Buoyancy")
-	float ObjectRadius = 100.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Box Collision")
+	int32 PointsPerAxis = 3;
     
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damping")
 	float LinearDamping = 0.1f;
     
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damping")
 	float AngularDamping = 0.05f;
-    
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wave Physics")
-	bool bUseWavePhysics = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
 	bool bShowDebug = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Collision Buoyancy")
-	bool bAutoGeneratePoints = true;
-    
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Collision Buoyancy")
-	int32 PointsPerAxis = 3;
-
 private:
 	UPROPERTY()
-	UPrimitiveComponent* PhysicsComponent;
-
+	UBoxComponent* BoxComponent;
+    
 	UPROPERTY()
 	TArray<FVector> BuoyancyPoints;
-	
-	void SinglePointBouyancy(float DeltaTime);
-	void MultiPointBouyancy(float DeltaTime);
+    
+	void GenerateBuoyancyPoints();
 	void ApplyBuoyancy(float DeltaTime);
 	void ApplyDampingForces(float DeltaTime);
-	void GenerateBuoyancyPoints();
-	void GenerateBoxBuoyancyPoints();
 	float GetWaterHeightAtLocation(const FVector& WorldLocation);
-	float SampleWaveHeightAtLocation(const FVector& WorldLocation);
 	void DrawDebugInfo();
 };
