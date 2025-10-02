@@ -63,13 +63,12 @@ void UWaterPhysicsComponent::TickComponent(float DeltaTime, ELevelTick TickType,
         UE_LOG(LogTemp, Error, TEXT("Physics not simulating on BoxComponent"));
         return;
     }
-
-    // CRITICAL DEBUG: Check mass vs force ratio
+    
     float BoxMass = BoxComponent->GetMass();
-    float WeightForce = BoxMass * 980.0f; // Weight in UE units
+    float WeightForce = BoxMass * 980.0f; 
     
     static int32 FrameCount = 0;
-    if (FrameCount % 60 == 0) // Log every 60 frames
+    if (FrameCount % 60 == 0)
     {
         UE_LOG(LogTemp, Error, TEXT("MASS VS FORCE"));
         UE_LOG(LogTemp, Error, TEXT("Box Mass: %.1f kg"), BoxMass);
@@ -121,7 +120,6 @@ void UWaterPhysicsComponent::GenerateBuoyancyPoints()
     
     UE_LOG(LogTemp, Warning, TEXT("✅Created %d buoyancy points"), BuoyancyPoints.Num());
     
-    // Log first few points for verification
     for (int32 i = 0; i < FMath::Min(5, BuoyancyPoints.Num()); i++)
     {
         UE_LOG(LogTemp, Warning, TEXT("   Point %d: %s"), i, *BuoyancyPoints[i].ToString());
@@ -130,13 +128,6 @@ void UWaterPhysicsComponent::GenerateBuoyancyPoints()
 
 void UWaterPhysicsComponent::ApplyBuoyancy(float DeltaTime)
 {
-    UE_LOG(LogTemp, Error, TEXT("BoxComponent valid: %s"), BoxComponent ? TEXT("YES") : TEXT("NO"));
-    UE_LOG(LogTemp, Error, TEXT("Is simulating: %s"), BoxComponent->IsSimulatingPhysics() ? TEXT("YES") : TEXT("NO"));
-    UE_LOG(LogTemp, Error, TEXT("Box world location: %s"), *BoxComponent->GetComponentLocation().ToString());
-    
-    USceneComponent* RootComp = GetOwner()->GetRootComponent();
-    UE_LOG(LogTemp, Error, TEXT("Actor root component: %s"), RootComp ? *RootComp->GetName() : TEXT("NULL"));
-    UE_LOG(LogTemp, Error, TEXT("Is Box the root? %s"), (RootComp == BoxComponent) ? TEXT("YES") : TEXT("NO"));
     FVector BoxExtent = BoxComponent->GetUnscaledBoxExtent();
     
     float PointSizeX = (BoxExtent.X * 2.0f) / PointsPerAxis;
@@ -145,7 +136,6 @@ void UWaterPhysicsComponent::ApplyBuoyancy(float DeltaTime)
     
     int32 UnderwaterPoints = 0;
     float TotalForceApplied = 0.0f;
-    FVector CenterForceAccumulator = FVector::ZeroVector;
     
     for (int32 i = 0; i < BuoyancyPoints.Num(); i++)
     {
@@ -161,7 +151,7 @@ void UWaterPhysicsComponent::ApplyBuoyancy(float DeltaTime)
             float SubmergedHeight = FMath::Min(SubmersionDepth, PointSizeZ);
             float SubmergedVolume = PointSizeX * PointSizeY * SubmergedHeight;
             
-            float BuoyancyForce = WaterDensity * SubmergedVolume * 98.0f * BuoyancyForceMultiplier;
+            float BuoyancyForce = (SubmergedVolume / 1000.0f) * 980.f * BuoyancyForceMultiplier;
             TotalForceApplied += BuoyancyForce;
             
             BoxComponent->AddForceAtLocation(FVector(0, 0, BuoyancyForce), WorldPoint);
@@ -170,10 +160,10 @@ void UWaterPhysicsComponent::ApplyBuoyancy(float DeltaTime)
     
     if (UnderwaterPoints > 0)
     {
-        BoxComponent->AddForce(CenterForceAccumulator);
-        
-        UE_LOG(LogTemp, Error, TEXT("Underwater: %d points | Force per location: %.1f | Total center force: %.1f"), 
-               UnderwaterPoints, TotalForceApplied, CenterForceAccumulator.Z);
+        float BoxMass = BoxComponent->GetMass();
+        float WeightForce = BoxMass * 980.0f;
+        UE_LOG(LogTemp, Warning, TEXT("Force: %.1f N | Weight: %.1f N | Ratio: %.2f"), 
+               TotalForceApplied, WeightForce, TotalForceApplied / WeightForce);
     }
     
     ApplyDampingForces(DeltaTime);
@@ -213,7 +203,21 @@ float UWaterPhysicsComponent::GetWaterHeightAtLocation(const FVector& WorldLocat
                 true
             );
             
-            return WaterSurfaceLocation.Z;
+            float BaseWaterHeight = WaterSurfaceLocation.Z;
+            
+            if (UWaterWavesBase* WaterWaves = WaterBody->GetWaterWaves())
+            {
+                float CurrentTime = GetWorld()->GetTimeSeconds();
+                float WaveDisplacement = WaterWaves->GetSimpleWaveHeightAtPosition(
+                    WorldLocation,
+                    WaterDepth,
+                    CurrentTime
+                );
+                
+                return BaseWaterHeight + WaveDisplacement;
+            }
+            
+            return BaseWaterHeight;
         }
     }
     
