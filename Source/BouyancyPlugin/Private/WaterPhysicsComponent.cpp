@@ -176,7 +176,11 @@ void UWaterPhysicsComponent::ApplyDampingForces(float DeltaTime)
     BoxComponent->AddForce(LinearDampingForce);
     
     FVector AngularVelocity = BoxComponent->GetPhysicsAngularVelocityInRadians();
-    FVector AngularDampingTorque = -AngularVelocity * AngularDamping;
+    
+    float AngularSpeed = AngularVelocity.Size();
+    float DampingScale = 1.0f + (AngularSpeed * 2.0f);
+    
+    FVector AngularDampingTorque = -AngularVelocity * AngularDamping * DampingScale;
     BoxComponent->AddTorqueInRadians(AngularDampingTorque);
 }
 
