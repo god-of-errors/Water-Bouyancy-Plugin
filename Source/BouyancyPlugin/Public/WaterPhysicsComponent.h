@@ -4,6 +4,7 @@
 #include "Components/ActorComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/BoxComponent.h"
+#include "Components/SphereComponent.h"
 #include "WaterBodyActor.h"
 #include "WaterBodyComponent.h"
 #include "Engine/World.h"
@@ -12,45 +13,56 @@
 UCLASS(ClassGroup=(Physics), meta=(BlueprintSpawnableComponent))
 class UWaterPhysicsComponent : public UActorComponent
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
 public:
-	UWaterPhysicsComponent();
+    UWaterPhysicsComponent();
 
 protected:
-	virtual void BeginPlay() override;
-	virtual void TickComponent(float DeltaTime, ELevelTick TickType, 
-							  FActorComponentTickFunction* ThisTickFunction) override;
+    virtual void BeginPlay() override;
+    virtual void TickComponent(float DeltaTime, ELevelTick TickType, 
+                              FActorComponentTickFunction* ThisTickFunction) override;
 
 public:
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Buoyancy")
-	float WaterDensity = 1000.0f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Buoyancy")
+    float WaterDensity = 1000.0f;
     
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Buoyancy")
-	float BuoyancyForceMultiplier = 1.0f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Buoyancy")
+    float BuoyancyForceMultiplier = 1.0f;
     
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Box Collision")
-	int32 PointsPerAxis = 3;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Box Collision")
+    int32 PointsPerAxis = 3;
     
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damping")
-	float LinearDamping = 0.1f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damping")
+    float LinearDamping = 0.1f;
     
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damping")
-	float AngularDamping = 0.05f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damping")
+    float AngularDamping = 0.05f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
-	bool bShowDebug = true;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
+    bool bShowDebug = true;
+    
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
+    bool bShowSphereDebug = true;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Debug")
+    bool bIsSphere = false;
 
 private:
-	UPROPERTY()
-	UBoxComponent* BoxComponent;
+    UPROPERTY()
+    UBoxComponent* BoxComponent;
     
-	UPROPERTY()
-	TArray<FVector> BuoyancyPoints;
+    UPROPERTY()
+    USphereComponent* SphereComponent;
     
-	void GenerateBuoyancyPoints();
-	void ApplyBuoyancy(float DeltaTime);
-	void ApplyDampingForces(float DeltaTime);
-	float GetWaterHeightAtLocation(const FVector& WorldLocation);
-	void DrawDebugInfo();
+    UPROPERTY()
+    TArray<FVector> BuoyancyPoints;
+    
+    void GenerateBuoyancyPoints();
+    void GenerateBoxBuoyancyPoints();
+    void GenerateSphereBuoyancyPoints();
+    void ApplyBuoyancy(float DeltaTime);
+    void ApplyDampingForces(float DeltaTime);
+    float GetWaterHeightAtLocation(const FVector& WorldLocation);
+    void DrawDebugInfo();
 };
