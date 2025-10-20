@@ -48,12 +48,21 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Debug")
     bool bIsSphere = false;
 
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Debug")
+    bool bIsStaticMesh = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
+    bool bShowDetailedLogs = true;
+
 private:
     UPROPERTY()
     UBoxComponent* BoxComponent;
     
     UPROPERTY()
     USphereComponent* SphereComponent;
+
+    UPROPERTY()
+    UStaticMeshComponent* StaticMeshComponent;
     
     UPROPERTY()
     TArray<FVector> BuoyancyPoints;
@@ -61,6 +70,7 @@ private:
     void GenerateBuoyancyPoints();
     void GenerateBoxBuoyancyPoints();
     void GenerateSphereBuoyancyPoints();
+    void GenerateStaticMeshBuoyancyPoints();
     void ApplyBuoyancy(float DeltaTime);
     void ApplyDampingForces(float DeltaTime);
     float GetWaterHeightAtLocation(const FVector& WorldLocation);
