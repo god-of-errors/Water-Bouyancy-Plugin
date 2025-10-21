@@ -34,10 +34,10 @@ public:
     int32 PointsPerAxis = 3;
     
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damping")
-    float LinearDamping = 0.1f;
+    float LinearDamping = 1.f;
     
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damping")
-    float AngularDamping = 0.05f;
+    float AngularDamping = 20.f;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
     bool bShowDebug = true;

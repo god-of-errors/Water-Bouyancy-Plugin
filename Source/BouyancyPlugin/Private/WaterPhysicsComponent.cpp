@@ -499,7 +499,9 @@ void UWaterPhysicsComponent::ApplyDampingForces(float DeltaTime)
     
     FVector AngularVelocity = PhysicsComp->GetPhysicsAngularVelocityInRadians();
     float AngularSpeed = AngularVelocity.Size();
-    float DampingScale = 1.0f + (AngularSpeed * 2.0f);
+    float ExtraDamping = (StaticMeshComponent && StaticMeshComponent->IsSimulatingPhysics()) ? 5.0f : 1.0f;
+    
+    float DampingScale = ExtraDamping * (1.0f + (AngularSpeed * 3.0f));
     FVector AngularDampingTorque = -AngularVelocity * AngularDamping * DampingScale;
     PhysicsComp->AddTorqueInRadians(AngularDampingTorque);
 }
