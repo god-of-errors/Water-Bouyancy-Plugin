@@ -2,6 +2,7 @@
 #include "Components/SphereComponent.h"
 #include "DrawDebugHelpers.h"
 #include "EngineUtils.h"
+#include "PhysicsEngine/BodySetup.h"
 
 UWaterPhysicsComponent::UWaterPhysicsComponent()
 {
@@ -230,77 +231,129 @@ void UWaterPhysicsComponent::GenerateSphereBuoyancyPoints()
 
 void UWaterPhysicsComponent::GenerateStaticMeshBuoyancyPoints()
 {
-    UE_LOG(LogTemp, Warning, TEXT("=== GENERATING STATIC MESH BUOYANCY POINTS ==="));
+    UE_LOG(LogTemp, Warning, TEXT("GENERATING STATIC MESH BUOYANCY POINTS"));
     
     if (!StaticMeshComponent->GetStaticMesh())
     {
-        UE_LOG(LogTemp, Error, TEXT("StaticMeshComponent has no mesh assigned"));
+        UE_LOG(LogTemp, Error, TEXT("No mesh assigned"));
         return;
     }
     
-    FBoxSphereBounds MeshBounds = StaticMeshComponent->GetStaticMesh()->GetBounds();
-    FVector MeshExtent = MeshBounds.BoxExtent;
+    UBodySetup* BodySetup = StaticMeshComponent->GetStaticMesh()->GetBodySetup();
+    if (!BodySetup)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Mesh has no collision setup"));
+        return;
+    }
     
-    UE_LOG(LogTemp, Warning, TEXT("Mesh Bounds: (%.1f, %.1f, %.1f)"), MeshExtent.X, MeshExtent.Y, MeshExtent.Z);
-    UE_LOG(LogTemp, Warning, TEXT("Testing %d^3 = %d potential points"), PointsPerAxis, PointsPerAxis * PointsPerAxis * PointsPerAxis);
+    UE_LOG(LogTemp, Warning, TEXT("Mesh: %s"), *StaticMeshComponent->GetStaticMesh()->GetName());
+    UE_LOG(LogTemp, Warning, TEXT("Extracting points from collision geometry"));
     
     int32 PointsAdded = 0;
-    int32 PointsRejected = 0;
     
-    for (int32 X = 0; X < PointsPerAxis; X++)
+    for (const FKConvexElem& ConvexElem : BodySetup->AggGeom.ConvexElems)
     {
-        for (int32 Y = 0; Y < PointsPerAxis; Y++)
+        UE_LOG(LogTemp, Warning, TEXT("  Convex hull with %d vertices"), ConvexElem.VertexData.Num());
+        
+        for (const FVector& Vertex : ConvexElem.VertexData)
         {
-            for (int32 Z = 0; Z < PointsPerAxis; Z++)
+            BuoyancyPoints.Add(Vertex);
+            PointsAdded++;
+        }
+        
+        FVector HullCenter = FVector::ZeroVector;
+        for (const FVector& Vertex : ConvexElem.VertexData)
+        {
+            HullCenter += Vertex;
+        }
+        if (ConvexElem.VertexData.Num() > 0)
+        {
+            HullCenter /= ConvexElem.VertexData.Num();
+            BuoyancyPoints.Add(HullCenter);
+            PointsAdded++;
+        }
+    }
+    
+    for (const FKBoxElem& BoxElem : BodySetup->AggGeom.BoxElems)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("  Box collision found"));
+        
+        FVector BoxExtent = FVector(BoxElem.X, BoxElem.Y, BoxElem.Z) * 0.5f;
+        FVector BoxCenter = BoxElem.Center;
+        
+        for (int32 X = 0; X < 3; X++)
+        {
+            for (int32 Y = 0; Y < 3; Y++)
             {
-                FVector LocalPosition = FVector(
-                    MeshExtent.X * (2.0f * X / FMath::Max(1, PointsPerAxis - 1) - 1.0f),
-                    MeshExtent.Y * (2.0f * Y / FMath::Max(1, PointsPerAxis - 1) - 1.0f),
-                    MeshExtent.Z * (2.0f * Z / FMath::Max(1, PointsPerAxis - 1) - 1.0f)
-                );
-                
-                FVector WorldPosition = StaticMeshComponent->GetComponentTransform().TransformPosition(LocalPosition);
-                
-                // Check if this point is inside the mesh's collision
-                FHitResult HitResult;
-                FCollisionQueryParams QueryParams;
-                QueryParams.AddIgnoredActor(GetOwner());
-                
-                // Test if point is inside collision by doing a small sphere overlap at this location
-                bool bIsInsideCollision = StaticMeshComponent->OverlapComponent(
-                    WorldPosition,
-                    FQuat::Identity,
-                    FCollisionShape::MakeSphere(1.0f)
-                );
-                
-                // Alternative method: Check if point is within collision bounds
-                if (!bIsInsideCollision)
+                for (int32 Z = 0; Z < 3; Z++)
                 {
-                    FVector ClosestPoint;
-                    float DistanceSquared;
-                    StaticMeshComponent->GetSquaredDistanceToCollision(WorldPosition, DistanceSquared, ClosestPoint);
-                    
-                    // If distance is very small, point is likely inside or on surface
-                    if (DistanceSquared < 100.0f)
-                    {
-                        bIsInsideCollision = true;
-                    }
-                }
-                
-                if (bIsInsideCollision)
-                {
-                    BuoyancyPoints.Add(LocalPosition);
+                    FVector LocalPos = BoxCenter + FVector(
+                        BoxExtent.X * (X - 1),
+                        BoxExtent.Y * (Y - 1),
+                        BoxExtent.Z * (Z - 1)
+                    );
+                    BuoyancyPoints.Add(LocalPos);
                     PointsAdded++;
-                }
-                else
-                {
-                    PointsRejected++;
                 }
             }
         }
     }
     
-    UE_LOG(LogTemp, Warning, TEXT("✅ Generated %d static mesh buoyancy points (rejected %d outside collision)"), PointsAdded, PointsRejected);
+    for (const FKSphereElem& SphereElem : BodySetup->AggGeom.SphereElems)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("  Sphere collision found"));
+        
+        int32 NumLayers = 3;
+        for (int32 Layer = 0; Layer < NumLayers; Layer++)
+        {
+            float NormalizedHeight = 2.0f * Layer / FMath::Max(1, NumLayers - 1) - 1.0f;
+            float LayerHeight = SphereElem.Radius * NormalizedHeight;
+            float LayerRadius = FMath::Sqrt(FMath::Max(0.0f, SphereElem.Radius * SphereElem.Radius - LayerHeight * LayerHeight));
+            int32 PointsInLayer = FMath::Max(6, FMath::CeilToInt(12 * (LayerRadius / SphereElem.Radius)));
+            
+            for (int32 i = 0; i < PointsInLayer; i++)
+            {
+                float Angle = 2.0f * PI * i / PointsInLayer;
+                FVector LocalPos = SphereElem.Center + FVector(
+                    LayerRadius * FMath::Cos(Angle),
+                    LayerRadius * FMath::Sin(Angle),
+                    LayerHeight
+                );
+                BuoyancyPoints.Add(LocalPos);
+                PointsAdded++;
+            }
+        }
+    }
+    
+    for (const FKSphylElem& CapsuleElem : BodySetup->AggGeom.SphylElems)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("  Capsule collision found"));
+        
+        float HalfHeight = CapsuleElem.Length * 0.5f;
+        float Radius = CapsuleElem.Radius;
+        
+        int32 HeightSegments = 5;
+        int32 RadialSegments = 8;
+        
+        for (int32 H = 0; H < HeightSegments; H++)
+        {
+            float Height = -HalfHeight + (2.0f * HalfHeight * H / FMath::Max(1, HeightSegments - 1));
+            
+            for (int32 R = 0; R < RadialSegments; R++)
+            {
+                float Angle = 2.0f * PI * R / RadialSegments;
+                FVector LocalPos = CapsuleElem.Center + FVector(
+                    Radius * FMath::Cos(Angle),
+                    Radius * FMath::Sin(Angle),
+                    Height
+                );
+                BuoyancyPoints.Add(LocalPos);
+                PointsAdded++;
+            }
+        }
+    }
+    
+    UE_LOG(LogTemp, Warning, TEXT("✅ Generated %d buoyancy points from collision geometry"), PointsAdded);
     
     if (bShowDetailedLogs && BuoyancyPoints.Num() > 0)
     {
@@ -501,68 +554,97 @@ void UWaterPhysicsComponent::DrawDebugInfo()
     
     UPrimitiveComponent* PhysicsComp = nullptr;
     FVector ComponentCenter;
-    FString ComponentType = TEXT("Unknown");
     
     if (StaticMeshComponent && StaticMeshComponent->IsSimulatingPhysics())
     {
         PhysicsComp = StaticMeshComponent;
         ComponentCenter = StaticMeshComponent->GetComponentLocation();
-        ComponentType = TEXT("STATIC MESH");
         
-        FBoxSphereBounds Bounds = StaticMeshComponent->GetStaticMesh()->GetBounds();
-        FVector MeshExtent = Bounds.BoxExtent;
-        FQuat MeshRotation = StaticMeshComponent->GetComponentQuat();
-        DrawDebugBox(GetWorld(), ComponentCenter, MeshExtent, MeshRotation, FColor::Magenta, false, -1.0f, 0, 3.0f);
-        
-        if (bShowDetailedLogs)
+        if (UBodySetup* BodySetup = StaticMeshComponent->GetStaticMesh()->GetBodySetup())
         {
-            DrawDebugString(GetWorld(), ComponentCenter + FVector(0, 0, MeshExtent.Z + 20), 
-                           FString::Printf(TEXT("MESH: %s"), *StaticMeshComponent->GetStaticMesh()->GetName()), 
-                           nullptr, FColor::Magenta, -1.0f, true);
+            FTransform ComponentTransform = StaticMeshComponent->GetComponentTransform();
+            FColor CollisionColor = FColor::Green;
+            
+            for (const FKConvexElem& ConvexElem : BodySetup->AggGeom.ConvexElems)
+            {
+                FKConvexElem TransformedConvex = ConvexElem;
+                for (FVector& Vertex : TransformedConvex.VertexData)
+                {
+                    Vertex = ComponentTransform.TransformPosition(Vertex);
+                }
+                
+                for (int32 i = 0; i < TransformedConvex.VertexData.Num(); i++)
+                {
+                    for (int32 j = i + 1; j < TransformedConvex.VertexData.Num(); j++)
+                    {
+                        DrawDebugLine(GetWorld(), 
+                                    TransformedConvex.VertexData[i], 
+                                    TransformedConvex.VertexData[j], 
+                                    CollisionColor, false, -1.0f, 0, 2.0f);
+                    }
+                }
+            }
+            
+            for (const FKBoxElem& BoxElem : BodySetup->AggGeom.BoxElems)
+            {
+                FVector BoxCenter = ComponentTransform.TransformPosition(BoxElem.Center);
+                FQuat BoxRot = ComponentTransform.GetRotation() * BoxElem.Rotation.Quaternion();
+                FVector BoxExtent = FVector(BoxElem.X, BoxElem.Y, BoxElem.Z) * 0.5f;
+                DrawDebugBox(GetWorld(), BoxCenter, BoxExtent, BoxRot, CollisionColor, false, -1.0f, 0, 2.0f);
+            }
+            
+            for (const FKSphereElem& SphereElem : BodySetup->AggGeom.SphereElems)
+            {
+                FVector SphereCenter = ComponentTransform.TransformPosition(SphereElem.Center);
+                DrawDebugSphere(GetWorld(), SphereCenter, SphereElem.Radius, 16, CollisionColor, false, -1.0f, 0, 2.0f);
+            }
+            
+            for (const FKSphylElem& CapsuleElem : BodySetup->AggGeom.SphylElems)
+            {
+                FVector CapsuleCenter = ComponentTransform.TransformPosition(CapsuleElem.Center);
+                FQuat CapsuleRot = ComponentTransform.GetRotation() * CapsuleElem.Rotation.Quaternion();
+                DrawDebugCapsule(GetWorld(), CapsuleCenter, CapsuleElem.Length * 0.5f, CapsuleElem.Radius, 
+                               CapsuleRot, CollisionColor, false, -1.0f, 0, 2.0f);
+            }
         }
     }
     else if (SphereComponent && SphereComponent->IsSimulatingPhysics())
     {
         PhysicsComp = SphereComponent;
         ComponentCenter = SphereComponent->GetComponentLocation();
-        ComponentType = TEXT("SPHERE");
         
         float SphereRadius = SphereComponent->GetUnscaledSphereRadius();
-        DrawDebugSphere(GetWorld(), ComponentCenter, SphereRadius, 16, FColor::Yellow, false, -1.0f, 0, 2.0f);
+        DrawDebugSphere(GetWorld(), ComponentCenter, SphereRadius, 16, FColor::Green, false, -1.0f, 0, 2.0f);
     }
     else if (BoxComponent && BoxComponent->IsSimulatingPhysics())
     {
         PhysicsComp = BoxComponent;
         ComponentCenter = BoxComponent->GetComponentLocation();
-        ComponentType = TEXT("BOX");
         
         FVector BoxExtent = BoxComponent->GetUnscaledBoxExtent();
         FQuat BoxRotation = BoxComponent->GetComponentQuat();
-        DrawDebugBox(GetWorld(), ComponentCenter, BoxExtent, BoxRotation, FColor::Yellow, false, -1.0f, 0, 3.0f);
+        DrawDebugBox(GetWorld(), ComponentCenter, BoxExtent, BoxRotation, FColor::Green, false, -1.0f, 0, 3.0f);
     }
     
     if (!PhysicsComp) return;
     
     int32 UnderwaterCount = 0;
     
-    for (int32 i = 0; i < BuoyancyPoints.Num(); i++)
+    for (const FVector& LocalPoint : BuoyancyPoints)
     {
-        const FVector& LocalPoint = BuoyancyPoints[i];
         FVector WorldPoint = GetOwner()->GetTransform().TransformPosition(LocalPoint);
         float WaterHeight = GetWaterHeightAtLocation(WorldPoint);
         
-        FColor PointColor = (WorldPoint.Z < WaterHeight) ? FColor::Green : FColor::Orange;
-        DrawDebugSphere(GetWorld(), WorldPoint, 8.0f, 8, PointColor, false, -1.0f, 0, 2.0f);
+        FColor PointColor = (WorldPoint.Z < WaterHeight) ? FColor::Red : FColor::Yellow;
+        DrawDebugPoint(GetWorld(), WorldPoint, 5.0f, PointColor, false, -1.0f, 0);
         
         if (WorldPoint.Z < WaterHeight)
         {
             UnderwaterCount++;
-            FVector WaterSurface = FVector(WorldPoint.X, WorldPoint.Y, WaterHeight);
-            DrawDebugLine(GetWorld(), WorldPoint, WaterSurface, FColor::Cyan, false, -1.0f, 0, 1.0f);
         }
     }
     
-    DrawDebugString(GetWorld(), ComponentCenter + FVector(0, 0, 100), 
-                   FString::Printf(TEXT("%s: %d points (%d underwater)"), *ComponentType, BuoyancyPoints.Num(), UnderwaterCount), 
-                   nullptr, FColor::Green, -1.0f, true);
+    DrawDebugString(GetWorld(), ComponentCenter + FVector(0, 0, 150), 
+                   FString::Printf(TEXT("%d buoyancy points"), BuoyancyPoints.Num()), 
+                   nullptr, FColor::White, -1.0f, true, 1.5f);
 }
