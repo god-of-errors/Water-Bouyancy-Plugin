@@ -15,7 +15,6 @@ void UWaterPhysicsComponent::BeginPlay()
     
     UE_LOG(LogTemp, Warning, TEXT("WATER PHYSICS COMPONENT BEGIN PLAY!!!"));
     
-    // Try to find BoxComponent first
     BoxComponent = GetOwner()->FindComponentByClass<UBoxComponent>();
     
     if (BoxComponent)
@@ -39,7 +38,6 @@ void UWaterPhysicsComponent::BeginPlay()
         return;
     }
     
-    // If no box, try to find SphereComponent
     SphereComponent = GetOwner()->FindComponentByClass<USphereComponent>();
     
     if (SphereComponent)
@@ -565,24 +563,24 @@ void UWaterPhysicsComponent::DrawDebugInfo()
         if (UBodySetup* BodySetup = StaticMeshComponent->GetStaticMesh()->GetBodySetup())
         {
             FTransform ComponentTransform = StaticMeshComponent->GetComponentTransform();
-            FColor CollisionColor = FColor::Green;
             
             for (const FKConvexElem& ConvexElem : BodySetup->AggGeom.ConvexElems)
             {
-                FKConvexElem TransformedConvex = ConvexElem;
-                for (FVector& Vertex : TransformedConvex.VertexData)
+                for (int32 i = 0; i < ConvexElem.VertexData.Num(); i++)
                 {
-                    Vertex = ComponentTransform.TransformPosition(Vertex);
-                }
-                
-                for (int32 i = 0; i < TransformedConvex.VertexData.Num(); i++)
-                {
-                    for (int32 j = i + 1; j < TransformedConvex.VertexData.Num(); j++)
+                    FVector V1 = ComponentTransform.TransformPosition(ConvexElem.VertexData[i]);
+                    
+                    for (int32 j = i + 1; j < ConvexElem.VertexData.Num(); j++)
                     {
-                        DrawDebugLine(GetWorld(), 
-                                    TransformedConvex.VertexData[i], 
-                                    TransformedConvex.VertexData[j], 
-                                    CollisionColor, false, -1.0f, 0, 2.0f);
+                        FVector V2 = ComponentTransform.TransformPosition(ConvexElem.VertexData[j]);
+                        
+                        float Distance = FVector::Dist(V1, V2);
+                        float MaxEdgeLength = 200.0f;
+                        
+                        if (Distance < MaxEdgeLength)
+                        {
+                            DrawDebugLine(GetWorld(), V1, V2, FColor::Green, false, -1.0f, 0, 2.0f);
+                        }
                     }
                 }
             }
@@ -592,13 +590,13 @@ void UWaterPhysicsComponent::DrawDebugInfo()
                 FVector BoxCenter = ComponentTransform.TransformPosition(BoxElem.Center);
                 FQuat BoxRot = ComponentTransform.GetRotation() * BoxElem.Rotation.Quaternion();
                 FVector BoxExtent = FVector(BoxElem.X, BoxElem.Y, BoxElem.Z) * 0.5f;
-                DrawDebugBox(GetWorld(), BoxCenter, BoxExtent, BoxRot, CollisionColor, false, -1.0f, 0, 2.0f);
+                DrawDebugBox(GetWorld(), BoxCenter, BoxExtent, BoxRot, FColor::Green, false, -1.0f, 0, 2.0f);
             }
             
             for (const FKSphereElem& SphereElem : BodySetup->AggGeom.SphereElems)
             {
                 FVector SphereCenter = ComponentTransform.TransformPosition(SphereElem.Center);
-                DrawDebugSphere(GetWorld(), SphereCenter, SphereElem.Radius, 16, CollisionColor, false, -1.0f, 0, 2.0f);
+                DrawDebugSphere(GetWorld(), SphereCenter, SphereElem.Radius, 16, FColor::Green, false, -1.0f, 0, 2.0f);
             }
             
             for (const FKSphylElem& CapsuleElem : BodySetup->AggGeom.SphylElems)
@@ -606,8 +604,17 @@ void UWaterPhysicsComponent::DrawDebugInfo()
                 FVector CapsuleCenter = ComponentTransform.TransformPosition(CapsuleElem.Center);
                 FQuat CapsuleRot = ComponentTransform.GetRotation() * CapsuleElem.Rotation.Quaternion();
                 DrawDebugCapsule(GetWorld(), CapsuleCenter, CapsuleElem.Length * 0.5f, CapsuleElem.Radius, 
-                               CapsuleRot, CollisionColor, false, -1.0f, 0, 2.0f);
+                               CapsuleRot, FColor::Green, false, -1.0f, 0, 2.0f);
             }
+        }
+        
+        for (const FVector& LocalPoint : BuoyancyPoints)
+        {
+            FVector WorldPoint = StaticMeshComponent->GetComponentTransform().TransformPosition(LocalPoint);
+            float WaterHeight = GetWaterHeightAtLocation(WorldPoint);
+            
+            FColor PointColor = (WorldPoint.Z < WaterHeight) ? FColor::Red : FColor::Yellow;
+            DrawDebugPoint(GetWorld(), WorldPoint, 8.0f, PointColor, false, -1.0f, 0);
         }
     }
     else if (SphereComponent && SphereComponent->IsSimulatingPhysics())
@@ -617,6 +624,14 @@ void UWaterPhysicsComponent::DrawDebugInfo()
         
         float SphereRadius = SphereComponent->GetUnscaledSphereRadius();
         DrawDebugSphere(GetWorld(), ComponentCenter, SphereRadius, 16, FColor::Green, false, -1.0f, 0, 2.0f);
+        
+        for (const FVector& LocalPoint : BuoyancyPoints)
+        {
+            FVector WorldPoint = GetOwner()->GetTransform().TransformPosition(LocalPoint);
+            float WaterHeight = GetWaterHeightAtLocation(WorldPoint);
+            FColor PointColor = (WorldPoint.Z < WaterHeight) ? FColor::Red : FColor::Yellow;
+            DrawDebugPoint(GetWorld(), WorldPoint, 8.0f, PointColor, false, -1.0f, 0);
+        }
     }
     else if (BoxComponent && BoxComponent->IsSimulatingPhysics())
     {
@@ -626,27 +641,19 @@ void UWaterPhysicsComponent::DrawDebugInfo()
         FVector BoxExtent = BoxComponent->GetUnscaledBoxExtent();
         FQuat BoxRotation = BoxComponent->GetComponentQuat();
         DrawDebugBox(GetWorld(), ComponentCenter, BoxExtent, BoxRotation, FColor::Green, false, -1.0f, 0, 3.0f);
+        
+        for (const FVector& LocalPoint : BuoyancyPoints)
+        {
+            FVector WorldPoint = GetOwner()->GetTransform().TransformPosition(LocalPoint);
+            float WaterHeight = GetWaterHeightAtLocation(WorldPoint);
+            FColor PointColor = (WorldPoint.Z < WaterHeight) ? FColor::Red : FColor::Yellow;
+            DrawDebugPoint(GetWorld(), WorldPoint, 8.0f, PointColor, false, -1.0f, 0);
+        }
     }
     
     if (!PhysicsComp) return;
     
-    int32 UnderwaterCount = 0;
-    
-    for (const FVector& LocalPoint : BuoyancyPoints)
-    {
-        FVector WorldPoint = GetOwner()->GetTransform().TransformPosition(LocalPoint);
-        float WaterHeight = GetWaterHeightAtLocation(WorldPoint);
-        
-        FColor PointColor = (WorldPoint.Z < WaterHeight) ? FColor::Red : FColor::Yellow;
-        DrawDebugPoint(GetWorld(), WorldPoint, 5.0f, PointColor, false, -1.0f, 0);
-        
-        if (WorldPoint.Z < WaterHeight)
-        {
-            UnderwaterCount++;
-        }
-    }
-    
     DrawDebugString(GetWorld(), ComponentCenter + FVector(0, 0, 150), 
-                   FString::Printf(TEXT("%d buoyancy points"), BuoyancyPoints.Num()), 
+                   FString::Printf(TEXT("%d collision vertices"), BuoyancyPoints.Num()), 
                    nullptr, FColor::White, -1.0f, true, 1.5f);
 }

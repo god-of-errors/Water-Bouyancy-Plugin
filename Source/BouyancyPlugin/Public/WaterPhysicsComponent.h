@@ -5,6 +5,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/SphereComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "WaterBodyActor.h"
 #include "WaterBodyComponent.h"
 #include "Engine/World.h"
