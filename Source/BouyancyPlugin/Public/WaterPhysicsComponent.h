@@ -42,15 +42,15 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
     bool bShowDebug = true;
-    
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
-    bool bShowSphereDebug = true;
 
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Debug")
+    bool bIsStaticMesh = false;
+    
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Debug")
     bool bIsSphere = false;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Debug")
-    bool bIsStaticMesh = false;
+    bool bIsBox = false;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
     bool bShowDetailedLogs = true;
@@ -73,7 +73,7 @@ private:
     void GenerateSphereBuoyancyPoints();
     void GenerateStaticMeshBuoyancyPoints();
     void ApplyBuoyancy(float DeltaTime);
-    void ApplyDampingForces(float DeltaTime);
-    float GetWaterHeightAtLocation(const FVector& WorldLocation);
+    void ApplyDampingForces(float DeltaTime) const;
+    float GetWaterHeightAtLocation(const FVector& WorldLocation) const;
     void DrawDebugInfo();
 };
