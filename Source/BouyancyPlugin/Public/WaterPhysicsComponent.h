@@ -8,6 +8,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "WaterBodyActor.h"
 #include "WaterBodyComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "Engine/World.h"
 #include "WaterPhysicsComponent.generated.h"
 
@@ -52,6 +53,9 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Debug")
     bool bIsBox = false;
 
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Debug")
+    bool bIsCapsule = false;
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
     bool bShowDetailedLogs = true;
 
@@ -64,6 +68,9 @@ private:
 
     UPROPERTY()
     UStaticMeshComponent* StaticMeshComponent;
+
+    UPROPERTY()
+    UCapsuleComponent* CapsuleComponent;
     
     UPROPERTY()
     TArray<FVector> BuoyancyPoints;
@@ -72,6 +79,7 @@ private:
     void GenerateBoxBuoyancyPoints();
     void GenerateSphereBuoyancyPoints();
     void GenerateStaticMeshBuoyancyPoints();
+    void GenerateCapsuleBuoyancyPoints();
     void ApplyBuoyancy(float DeltaTime);
     void ApplyDampingForces(float DeltaTime) const;
     float GetWaterHeightAtLocation(const FVector& WorldLocation) const;
