@@ -78,8 +78,30 @@ void UWaterPhysicsComponent::BeginPlay()
         GenerateBuoyancyPoints();
         return;
     }
+
+    CapsuleComponent = GetOwner()->FindComponentByClass<UCapsuleComponent>();
     
-    UE_LOG(LogTemp, Error, TEXT("❌ No BoxComponent, SphereComponent or StaticMeshComponent found"));
+    if (CapsuleComponent)
+    {
+        bIsCapsule = true;
+        UE_LOG(LogTemp, Warning, TEXT("✅ Found CapsuleComponent: %s"), *CapsuleComponent->GetName());
+        
+        if (!CapsuleComponent->IsSimulatingPhysics())
+        {
+            UE_LOG(LogTemp, Error, TEXT("❌ Enable 'Simulate Physics' on CapsuleComponent"));
+            return;
+        }
+        
+        UE_LOG(LogTemp, Warning, TEXT("✅ Capsule Collision Buoyancy Mode"));
+        UE_LOG(LogTemp, Warning, TEXT("   Mass: %.2f kg"), CapsuleComponent->GetMass());
+        UE_LOG(LogTemp, Warning, TEXT("   Radius: %.1f"), CapsuleComponent->GetUnscaledCapsuleRadius());
+        UE_LOG(LogTemp, Warning, TEXT("   Half Height: %.1f"), CapsuleComponent->GetUnscaledCapsuleHalfHeight());
+        
+        GenerateBuoyancyPoints();
+        return;
+    }
+    
+    UE_LOG(LogTemp, Error, TEXT("❌ No BoxComponent, SphereComponent, StaticMeshComponent or CapsuleComponent found"));
     TArray<UActorComponent*> AllComponents;
     GetOwner()->GetComponents(AllComponents);
     UE_LOG(LogTemp, Error, TEXT("Available components:"));
@@ -141,6 +163,10 @@ void UWaterPhysicsComponent::GenerateBuoyancyPoints()
     else if (bIsBox)
     {
         GenerateBoxBuoyancyPoints();
+    }
+    else if (bIsCapsule)
+    {
+        GenerateCapsuleBuoyancyPoints();
     }
     else
     {
@@ -352,6 +378,29 @@ void UWaterPhysicsComponent::GenerateStaticMeshBuoyancyPoints()
     }
 }
 
+void UWaterPhysicsComponent::GenerateCapsuleBuoyancyPoints()
+{
+    UE_LOG(LogTemp, Warning, TEXT("GENERATING CAPSULE BUOYANCY POINTS!!!"));
+    
+    float CapsuleRadius = CapsuleComponent->GetUnscaledCapsuleRadius();
+    float CapsuleHalfHeight = CapsuleComponent->GetUnscaledCapsuleHalfHeight();
+    FQuat CapsuleRotation = CapsuleComponent->GetComponentQuat();
+    
+    DrawDebugCapsule(GetWorld(), CapsuleComponent->GetComponentLocation(), CapsuleHalfHeight, CapsuleRadius, 
+                   CapsuleRotation, FColor::Green, false, -1.0f, 0, 2.0f);
+        
+    for (const FVector& LocalPoint : BuoyancyPoints)
+    {
+        FVector WorldPoint = GetOwner()->GetTransform().TransformPosition(LocalPoint);
+        float WaterHeight = GetWaterHeightAtLocation(WorldPoint);
+        FColor PointColor = (WorldPoint.Z < WaterHeight) ? FColor::Red : FColor::Yellow;
+        
+        DrawDebugPoint(GetWorld(), WorldPoint, 8.0f, PointColor, false, -1.0f, 0);
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("✅ Generated %d capsule points"), BuoyancyPoints.Num());
+}
+
 void UWaterPhysicsComponent::ApplyBuoyancy(float DeltaTime)
 {
     UPrimitiveComponent* PhysicsComp = nullptr;
@@ -455,6 +504,33 @@ void UWaterPhysicsComponent::ApplyBuoyancy(float DeltaTime)
                    TotalForceApplied, WeightForce, TotalForceApplied / WeightForce, UnderwaterPoints, BuoyancyPoints.Num());
         }
     }
+    else if (bIsCapsule)
+    {
+        PhysicsComp = CapsuleComponent;
+        float CapsuleRadius = CapsuleComponent->GetUnscaledCapsuleRadius();
+        float CapsuleHalfHeight = CapsuleComponent->GetUnscaledCapsuleHalfHeight();
+        
+        // Capsule volume = cylinder + 2 hemispheres = π(r²)h + (4/3)π(r³)
+        float CylinderHeight = (CapsuleHalfHeight - CapsuleRadius) * 2.0f;
+        float TotalVolume = PI * CapsuleRadius * CapsuleRadius * CylinderHeight + (4.0f/3.0f) * PI * FMath::Pow(CapsuleRadius, 3);
+        float VolumePerPoint = TotalVolume / FMath::Max(1, BuoyancyPoints.Num());
+        
+        for (const FVector& LocalPoint : BuoyancyPoints)
+        {
+            FVector WorldPoint = GetOwner()->GetTransform().TransformPosition(LocalPoint);
+            float WaterHeight = GetWaterHeightAtLocation(WorldPoint);
+            
+            if (WorldPoint.Z < WaterHeight)
+            {
+                float SubmersionDepth = WaterHeight - WorldPoint.Z;
+                float SubmersionRatio = FMath::Clamp(SubmersionDepth / (CapsuleRadius * 2.0f), 0.0f, 1.0f);
+                float SubmergedVolume = VolumePerPoint * SubmersionRatio;
+                float BuoyancyForce = (SubmergedVolume / 1000.0f) * 9.8f * BuoyancyForceMultiplier * 50.0f;
+                
+                PhysicsComp->AddForceAtLocation(FVector(0, 0, BuoyancyForce), WorldPoint);
+            }
+        }
+    }
     
     if (PhysicsComp)
     {
@@ -477,6 +553,10 @@ void UWaterPhysicsComponent::ApplyDampingForces(float DeltaTime) const
     else if (bIsBox)
     {
         PhysicsComp = BoxComponent;
+    }
+    else if (bIsCapsule)
+    {
+        PhysicsComp = CapsuleComponent;
     }
     
     if (!PhysicsComp) return;
@@ -632,6 +712,25 @@ void UWaterPhysicsComponent::DrawDebugInfo()
         FQuat BoxRotation = BoxComponent->GetComponentQuat();
         DrawDebugBox(GetWorld(), ComponentCenter, BoxExtent, BoxRotation, FColor::Green, false, -1.0f, 0, 3.0f);
         
+        for (const FVector& LocalPoint : BuoyancyPoints)
+        {
+            FVector WorldPoint = GetOwner()->GetTransform().TransformPosition(LocalPoint);
+            float WaterHeight = GetWaterHeightAtLocation(WorldPoint);
+            FColor PointColor = (WorldPoint.Z < WaterHeight) ? FColor::Red : FColor::Yellow;
+            DrawDebugPoint(GetWorld(), WorldPoint, 8.0f, PointColor, false, -1.0f, 0);
+        }
+    }
+    else if (bIsCapsule)
+    {
+        PhysicsComp = CapsuleComponent;
+        ComponentCenter = CapsuleComponent->GetComponentLocation();
+    
+        float CapsuleRadius = CapsuleComponent->GetUnscaledCapsuleRadius();
+        float CapsuleHalfHeight = CapsuleComponent->GetUnscaledCapsuleHalfHeight();
+        FQuat CapsuleRotation = CapsuleComponent->GetComponentQuat();
+        DrawDebugCapsule(GetWorld(), ComponentCenter, CapsuleHalfHeight, CapsuleRadius, 
+                       CapsuleRotation, FColor::Green, false, -1.0f, 0, 2.0f);
+    
         for (const FVector& LocalPoint : BuoyancyPoints)
         {
             FVector WorldPoint = GetOwner()->GetTransform().TransformPosition(LocalPoint);
