@@ -499,7 +499,7 @@ void UWaterPhysicsComponent::ApplyBuoyancy(float DeltaTime)
         if (UnderwaterPoints > 0 && bShowDetailedLogs)
         {
             float MeshMass = StaticMeshComponent->GetMass();
-            float WeightForce = MeshMass * 980.0f;
+            float WeightForce = MeshMass * 98.0f;
             UE_LOG(LogTemp, Error, TEXT("MESH SUMMARY: Force: %.1f N | Weight: %.1f N | Ratio: %.2f | Underwater: %d/%d"), 
                    TotalForceApplied, WeightForce, TotalForceApplied / WeightForce, UnderwaterPoints, BuoyancyPoints.Num());
         }
