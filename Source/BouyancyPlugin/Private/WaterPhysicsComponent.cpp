@@ -217,32 +217,32 @@ void UWaterPhysicsComponent::GenerateSphereBuoyancyPoints()
     UE_LOG(LogTemp, Warning, TEXT("GENERATING SPHERE BUOYANCY POINTS!!!"));
 
     float SphereRadius = SphereComponent->GetUnscaledSphereRadius();
+    int32 ShellNum = PointsPerAxis;
+                
     
-    if (PointsPerAxis < 2)
+    for (int32 Shell = 0; Shell < ShellNum; Shell++)
     {
-        PointsPerAxis = 2;
-    }
-    
-    int32 NumLayers = PointsPerAxis;
-    for (int32 Layer = 0; Layer < NumLayers; Layer++)
-    {
-        float NormalizedHeight = 2.0f * Layer / FMath::Max(1, NumLayers - 1) - 1.0f;
-        float LayerHeight = SphereRadius * NormalizedHeight;
-        float LayerRadius = FMath::Sqrt(FMath::Max(0.0f, SphereRadius * SphereRadius - LayerHeight * LayerHeight));
-        int32 PointsInLayer = FMath::Max(1, FMath::CeilToInt(PointsPerAxis * (LayerRadius / SphereRadius)));
+        float ShellRadius = SphereRadius * (Shell + 1.0f) / ShellNum;
+        int32 PointsInShell = FMath::Max(8, PointsPerAxis * PointsPerAxis * (Shell + 1) / ShellNum);
         
-        for (int32 i = 0; i < PointsInLayer; i++)
+        float GoldenRatio = (1.0f + FMath::Sqrt(5.0f)) / 2.0f;
+        
+        for (int32 i = 0; i < PointsInShell; i++)
         {
-            float Angle = 2.0f * PI * i / FMath::Max(1, PointsInLayer);
+            float Theta = 2.0f * PI * i / GoldenRatio;
+            float Phi = FMath::Acos(1.0f - 2.0f * (i + 0.5f) / PointsInShell);
+            
             FVector LocalPosition = FVector(
-                LayerRadius * FMath::Cos(Angle),
-                LayerRadius * FMath::Sin(Angle),
-                LayerHeight
+                ShellRadius * FMath::Sin(Phi) * FMath::Cos(Theta),
+                ShellRadius * FMath::Sin(Phi) * FMath::Sin(Theta),
+                ShellRadius * FMath::Cos(Phi)
             );
             
             BuoyancyPoints.Add(LocalPosition);
         }
     }
+    
+    BuoyancyPoints.Add(FVector::ZeroVector);
     
     UE_LOG(LogTemp, Warning, TEXT(" Generated %d sphere points"), BuoyancyPoints.Num());
 }
