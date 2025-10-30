@@ -15,7 +15,7 @@ void UWaterPhysicsComponent::BeginPlay()
     
     UE_LOG(LogTemp, Warning, TEXT("WATER PHYSICS COMPONENT BEGIN PLAY!!!"));
     
-    BoxComponent = GetOwner()->FindComponentByClass<UBoxComponent>();
+    UBoxComponent* BoxComponent = GetOwner()->FindComponentByClass<UBoxComponent>();
     
     if (BoxComponent)
     {
@@ -26,7 +26,7 @@ void UWaterPhysicsComponent::BeginPlay()
         if (!BoxComponent->IsSimulatingPhysics())
         {
             UE_LOG(LogTemp, Error, TEXT(" Enable 'Simulate Physics' on BoxComponent"));
-            return;
+            BoxComponent->SetSimulatePhysics(true);
         }
         
         UE_LOG(LogTemp, Warning, TEXT(" Box Collision Buoyancy Mode"));
@@ -34,12 +34,14 @@ void UWaterPhysicsComponent::BeginPlay()
         
         FVector BoxExtent = BoxComponent->GetUnscaledBoxExtent();
         UE_LOG(LogTemp, Warning, TEXT("   Box Extents: (%.1f, %.1f, %.1f)"), BoxExtent.X, BoxExtent.Y, BoxExtent.Z);
+
+        PhysicsComp = BoxComponent;
         
         GenerateBuoyancyPoints();
         return;
     }
     
-    SphereComponent = GetOwner()->FindComponentByClass<USphereComponent>();
+    USphereComponent* SphereComponent = GetOwner()->FindComponentByClass<USphereComponent>();
     
     if (SphereComponent)
     {
@@ -49,18 +51,20 @@ void UWaterPhysicsComponent::BeginPlay()
         if (!SphereComponent->IsSimulatingPhysics())
         {
             UE_LOG(LogTemp, Error, TEXT(" Enable 'Simulate Physics' on SphereComponent"));
-            return;
+            SphereComponent->SetSimulatePhysics(true);
         }
         
         UE_LOG(LogTemp, Warning, TEXT(" Sphere Collision Buoyancy Mode"));
         UE_LOG(LogTemp, Warning, TEXT("   Mass: %.2f kg"), SphereComponent->GetMass());
         UE_LOG(LogTemp, Warning, TEXT("   Radius: %.1f"), SphereComponent->GetUnscaledSphereRadius());
+
+        PhysicsComp = SphereComponent;
         
         GenerateBuoyancyPoints();
         return;
     }
 
-    CapsuleComponent = GetOwner()->FindComponentByClass<UCapsuleComponent>();
+    UCapsuleComponent* CapsuleComponent = GetOwner()->FindComponentByClass<UCapsuleComponent>();
     
     if (CapsuleComponent)
     {
@@ -70,33 +74,46 @@ void UWaterPhysicsComponent::BeginPlay()
         if (!CapsuleComponent->IsSimulatingPhysics())
         {
             UE_LOG(LogTemp, Error, TEXT(" Enable 'Simulate Physics' on CapsuleComponent"));
-            return;
+            CapsuleComponent->SetSimulatePhysics(true);
         }
         
         UE_LOG(LogTemp, Warning, TEXT(" Capsule Collision Buoyancy Mode"));
         UE_LOG(LogTemp, Warning, TEXT("   Mass: %.2f kg"), CapsuleComponent->GetMass());
         UE_LOG(LogTemp, Warning, TEXT("   Radius: %.1f"), CapsuleComponent->GetUnscaledCapsuleRadius());
         UE_LOG(LogTemp, Warning, TEXT("   Half Height: %.1f"), CapsuleComponent->GetUnscaledCapsuleHalfHeight());
+
+        PhysicsComp = CapsuleComponent;
         
         GenerateBuoyancyPoints();
         return;
     }
 
-    StaticMeshComponent = GetOwner()->FindComponentByClass<UStaticMeshComponent>();
+    UStaticMeshComponent* StaticMeshComponent = GetOwner()->FindComponentByClass<UStaticMeshComponent>();
     
-    if (StaticMeshComponent && StaticMeshComponent->IsSimulatingPhysics())
+    if (StaticMeshComponent)
     {
         bIsStaticMesh = true;
         
         UE_LOG(LogTemp, Warning, TEXT(" Found StaticMeshComponent: %s"), *StaticMeshComponent->GetName());
+
+        if (!StaticMeshComponent->IsSimulatingPhysics())
+        {
+            UE_LOG(LogTemp, Error, TEXT(" Enable 'Simulate Physics' on StaticMeshComponent"));
+            StaticMeshComponent->SetSimulatePhysics(true);
+        }
+        
         UE_LOG(LogTemp, Warning, TEXT(" Static Mesh Mode"));
         UE_LOG(LogTemp, Warning, TEXT("   Mass: %.2f kg"), StaticMeshComponent->GetMass());
+
         if (StaticMeshComponent->GetStaticMesh())
         {
             UE_LOG(LogTemp, Warning, TEXT("   Mesh: %s"), *StaticMeshComponent->GetStaticMesh()->GetName());
             FBoxSphereBounds Bounds = StaticMeshComponent->GetStaticMesh()->GetBounds();
             UE_LOG(LogTemp, Warning, TEXT("   Bounds: (%.1f, %.1f, %.1f)"), Bounds.BoxExtent.X, Bounds.BoxExtent.Y, Bounds.BoxExtent.Z);
         }
+
+        PhysicsComp = StaticMeshComponent;
+        
         GenerateBuoyancyPoints();
         return;
     }
@@ -116,31 +133,9 @@ void UWaterPhysicsComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
     
-    UPrimitiveComponent* PhysicsComp = nullptr;
-    
-    if (StaticMeshComponent && StaticMeshComponent->IsSimulatingPhysics())
-    {
-        PhysicsComp = StaticMeshComponent;
-    }
-    else if (SphereComponent && SphereComponent->IsSimulatingPhysics())
-    {
-        PhysicsComp = SphereComponent;
-    }
-    else if (BoxComponent && BoxComponent->IsSimulatingPhysics())
-    {
-        PhysicsComp = BoxComponent;
-    }
-    else if (CapsuleComponent && CapsuleComponent->IsSimulatingPhysics())
-    {
-        PhysicsComp = CapsuleComponent;
-    }
-    
     if (!PhysicsComp)
     {
-        UE_LOG(LogTemp, Error, TEXT(" No physics component in Tick"));
-        UE_LOG(LogTemp, Error, TEXT("   StaticMeshComponent: %s"), StaticMeshComponent ? TEXT("Found") : TEXT("NULL"));
-        UE_LOG(LogTemp, Error, TEXT("   BoxComponent: %s"), BoxComponent ? TEXT("Found") : TEXT("NULL"));
-        UE_LOG(LogTemp, Error, TEXT("   SphereComponent: %s"), SphereComponent ? TEXT("Found") : TEXT("NULL"));
+        UE_LOG(LogTemp, Error, TEXT(" No physics component has been found"));
         return;
     }
     
@@ -182,6 +177,7 @@ void UWaterPhysicsComponent::GenerateBoxBuoyancyPoints()
 {
     UE_LOG(LogTemp, Warning, TEXT("GENERATING BOX BUOYANCY POINTS!!!"));
     BuoyancyPoints.Empty();
+    UBoxComponent* BoxComponent = GetOwner()->FindComponentByClass<UBoxComponent>();
     
     FVector BoxExtent = BoxComponent->GetUnscaledBoxExtent();
     UE_LOG(LogTemp, Warning, TEXT("Box Extents: (%.1f, %.1f, %.1f)"), BoxExtent.X, BoxExtent.Y, BoxExtent.Z);
@@ -215,10 +211,10 @@ void UWaterPhysicsComponent::GenerateBoxBuoyancyPoints()
 void UWaterPhysicsComponent::GenerateSphereBuoyancyPoints()
 {
     UE_LOG(LogTemp, Warning, TEXT("GENERATING SPHERE BUOYANCY POINTS!!!"));
-
+    USphereComponent* SphereComponent = GetOwner()->FindComponentByClass<USphereComponent>();
+    
     float SphereRadius = SphereComponent->GetUnscaledSphereRadius();
     int32 ShellNum = PointsPerAxis;
-                
     
     for (int32 Shell = 0; Shell < ShellNum; Shell++)
     {
@@ -250,6 +246,7 @@ void UWaterPhysicsComponent::GenerateSphereBuoyancyPoints()
 void UWaterPhysicsComponent::GenerateStaticMeshBuoyancyPoints()
 {
     UE_LOG(LogTemp, Warning, TEXT("GENERATING STATIC MESH BUOYANCY POINTS"));
+    UStaticMeshComponent* StaticMeshComponent = GetOwner()->FindComponentByClass<UStaticMeshComponent>();
     
     if (!StaticMeshComponent->GetStaticMesh())
     {
@@ -385,6 +382,7 @@ void UWaterPhysicsComponent::GenerateStaticMeshBuoyancyPoints()
 void UWaterPhysicsComponent::GenerateCapsuleBuoyancyPoints()
 {
     UE_LOG(LogTemp, Warning, TEXT("GENERATING CAPSULE BUOYANCY POINTS!!!"));
+    UCapsuleComponent* CapsuleComponent = GetOwner()->FindComponentByClass<UCapsuleComponent>();
     
     float CapsuleRadius = CapsuleComponent->GetUnscaledCapsuleRadius();
     float CapsuleHalfHeight = CapsuleComponent->GetUnscaledCapsuleHalfHeight();
@@ -452,13 +450,12 @@ void UWaterPhysicsComponent::GenerateCapsuleBuoyancyPoints()
 
 void UWaterPhysicsComponent::ApplyBuoyancy(float DeltaTime)
 {
-    UPrimitiveComponent* PhysicsComp = nullptr;
     int32 UnderwaterPoints = 0;
     float TotalForceApplied = 0.0f;
+    USphereComponent* SphereComponent = GetOwner()->FindComponentByClass<USphereComponent>();
     
     if (bIsSphere)
     {
-        PhysicsComp = SphereComponent;
         float SphereRadius = SphereComponent->GetUnscaledSphereRadius();
         float TotalSphereVolume = (4.0f/3.0f) * PI * FMath::Pow(SphereRadius, 3);
         float VolumePerPoint = TotalSphereVolume / FMath::Max(1, BuoyancyPoints.Num());
@@ -483,7 +480,8 @@ void UWaterPhysicsComponent::ApplyBuoyancy(float DeltaTime)
     }
     else if (bIsBox)
     {
-        PhysicsComp = BoxComponent;
+        UBoxComponent* BoxComponent = GetOwner()->FindComponentByClass<UBoxComponent>();
+        
         FVector BoxExtent = BoxComponent->GetUnscaledBoxExtent();
         float PointSizeX = (BoxExtent.X * 2.0f) / PointsPerAxis;
         float PointSizeY = (BoxExtent.Y * 2.0f) / PointsPerAxis;
@@ -509,7 +507,7 @@ void UWaterPhysicsComponent::ApplyBuoyancy(float DeltaTime)
     }
     else if (bIsStaticMesh)
     {
-        PhysicsComp = StaticMeshComponent;
+        UStaticMeshComponent* StaticMeshComponent = GetOwner()->FindComponentByClass<UStaticMeshComponent>();
         FBoxSphereBounds MeshBounds = StaticMeshComponent->GetStaticMesh()->GetBounds();
         FVector MeshExtent = MeshBounds.BoxExtent;
         
@@ -551,7 +549,7 @@ void UWaterPhysicsComponent::ApplyBuoyancy(float DeltaTime)
     }
     else if (bIsCapsule)
     {
-        PhysicsComp = CapsuleComponent;
+        UCapsuleComponent* CapsuleComponent = GetOwner()->FindComponentByClass<UCapsuleComponent>();
         float CapsuleRadius = CapsuleComponent->GetUnscaledCapsuleRadius();
         float CapsuleHalfHeight = CapsuleComponent->GetUnscaledCapsuleHalfHeight();
         
@@ -583,8 +581,8 @@ void UWaterPhysicsComponent::ApplyBuoyancy(float DeltaTime)
     {
         float MeshMass = PhysicsComp->GetMass();
         float WeightForce = MeshMass * 98.0f;
-        UE_LOG(LogTemp, Error, TEXT("Bouyancy report: Force: %.1f N | Weight: %.1f N | Ratio: %.2f | Underwater: %d/%d"), 
-               TotalForceApplied, WeightForce, TotalForceApplied / WeightForce, UnderwaterPoints, BuoyancyPoints.Num());
+        UE_LOG(LogTemp, Error, TEXT("Bouyancy report from the %s: Force: %.1f N | Weight: %.1f N | Ratio: %.2f | Underwater: %d/%d"), 
+               *PhysicsComp->GetName(), TotalForceApplied, WeightForce, TotalForceApplied / WeightForce, UnderwaterPoints, BuoyancyPoints.Num());
     }
     
     if (PhysicsComp)
@@ -595,25 +593,6 @@ void UWaterPhysicsComponent::ApplyBuoyancy(float DeltaTime)
 
 void UWaterPhysicsComponent::ApplyDampingForces(float DeltaTime) const
 {
-    UPrimitiveComponent* PhysicsComp = nullptr;
-    
-    if (bIsStaticMesh)
-    {
-        PhysicsComp = StaticMeshComponent;
-    }
-    else if (bIsSphere)
-    {
-        PhysicsComp = SphereComponent;
-    }
-    else if (bIsBox)
-    {
-        PhysicsComp = BoxComponent;
-    }
-    else if (bIsCapsule)
-    {
-        PhysicsComp = CapsuleComponent;
-    }
-    
     if (!PhysicsComp) return;
     
     FVector Velocity = PhysicsComp->GetPhysicsLinearVelocity();
@@ -673,12 +652,11 @@ void UWaterPhysicsComponent::DrawDebugInfo()
 {
     if (!GetWorld()) return;
     
-    UPrimitiveComponent* PhysicsComp = nullptr;
     FVector ComponentCenter;
+    UStaticMeshComponent* StaticMeshComponent = GetOwner()->FindComponentByClass<UStaticMeshComponent>();
     
     if (bIsStaticMesh)
     {
-        PhysicsComp = StaticMeshComponent;
         ComponentCenter = StaticMeshComponent->GetComponentLocation();
         
         if (UBodySetup* BodySetup = StaticMeshComponent->GetStaticMesh()->GetBodySetup())
@@ -731,7 +709,7 @@ void UWaterPhysicsComponent::DrawDebugInfo()
         
         for (const FVector& LocalPoint : BuoyancyPoints)
         {
-            FVector WorldPoint = StaticMeshComponent->GetComponentTransform().TransformPosition(LocalPoint);
+            FVector WorldPoint = GetOwner()->GetTransform().TransformPosition(LocalPoint);
             float WaterHeight = GetWaterHeightAtLocation(WorldPoint);
             
             FColor PointColor = (WorldPoint.Z < WaterHeight) ? FColor::Red : FColor::Yellow;
@@ -740,40 +718,24 @@ void UWaterPhysicsComponent::DrawDebugInfo()
     }
     else if (bIsSphere)
     {
-        PhysicsComp = SphereComponent;
+        USphereComponent* SphereComponent = GetOwner()->FindComponentByClass<USphereComponent>();
         ComponentCenter = SphereComponent->GetComponentLocation();
         
         float SphereRadius = SphereComponent->GetUnscaledSphereRadius();
         DrawDebugSphere(GetWorld(), ComponentCenter, SphereRadius, 16, FColor::Green, false, -1.0f, 0, 2.0f);
-        
-        for (const FVector& LocalPoint : BuoyancyPoints)
-        {
-            FVector WorldPoint = GetOwner()->GetTransform().TransformPosition(LocalPoint);
-            float WaterHeight = GetWaterHeightAtLocation(WorldPoint);
-            FColor PointColor = (WorldPoint.Z < WaterHeight) ? FColor::Red : FColor::Yellow;
-            DrawDebugPoint(GetWorld(), WorldPoint, 8.0f, PointColor, false, -1.0f, 0);
-        }
     }
     else if (bIsBox)
     {
-        PhysicsComp = BoxComponent;
+        UBoxComponent* BoxComponent = GetOwner()->FindComponentByClass<UBoxComponent>();
         ComponentCenter = BoxComponent->GetComponentLocation();
         
         FVector BoxExtent = BoxComponent->GetUnscaledBoxExtent();
         FQuat BoxRotation = BoxComponent->GetComponentQuat();
         DrawDebugBox(GetWorld(), ComponentCenter, BoxExtent, BoxRotation, FColor::Green, false, -1.0f, 0, 3.0f);
-        
-        for (const FVector& LocalPoint : BuoyancyPoints)
-        {
-            FVector WorldPoint = GetOwner()->GetTransform().TransformPosition(LocalPoint);
-            float WaterHeight = GetWaterHeightAtLocation(WorldPoint);
-            FColor PointColor = (WorldPoint.Z < WaterHeight) ? FColor::Red : FColor::Yellow;
-            DrawDebugPoint(GetWorld(), WorldPoint, 8.0f, PointColor, false, -1.0f, 0);
-        }
     }
     else if (bIsCapsule)
     {
-        PhysicsComp = CapsuleComponent;
+        UCapsuleComponent* CapsuleComponent = GetOwner()->FindComponentByClass<UCapsuleComponent>();
         ComponentCenter = CapsuleComponent->GetComponentLocation();
     
         float CapsuleRadius = CapsuleComponent->GetUnscaledCapsuleRadius();
@@ -781,14 +743,15 @@ void UWaterPhysicsComponent::DrawDebugInfo()
         FQuat CapsuleRotation = CapsuleComponent->GetComponentQuat();
         DrawDebugCapsule(GetWorld(), ComponentCenter, CapsuleHalfHeight, CapsuleRadius, 
                        CapsuleRotation, FColor::Green, false, -1.0f, 0, 2.0f);
-    
-        for (const FVector& LocalPoint : BuoyancyPoints)
-        {
-            FVector WorldPoint = GetOwner()->GetTransform().TransformPosition(LocalPoint);
-            float WaterHeight = GetWaterHeightAtLocation(WorldPoint);
-            FColor PointColor = (WorldPoint.Z < WaterHeight) ? FColor::Red : FColor::Yellow;
-            DrawDebugPoint(GetWorld(), WorldPoint, 8.0f, PointColor, false, -1.0f, 0);
-        }
+    }
+
+    for (const FVector& LocalPoint : BuoyancyPoints)
+    {
+        FVector WorldPoint = GetOwner()->GetTransform().TransformPosition(LocalPoint);
+        float WaterHeight = GetWaterHeightAtLocation(WorldPoint);
+            
+        FColor PointColor = (WorldPoint.Z < WaterHeight) ? FColor::Red : FColor::Yellow;
+        DrawDebugPoint(GetWorld(), WorldPoint, 8.0f, PointColor, false, -1.0f, 0);
     }
     
     if (!PhysicsComp) return;
