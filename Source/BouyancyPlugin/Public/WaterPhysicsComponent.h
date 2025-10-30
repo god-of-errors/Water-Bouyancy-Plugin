@@ -26,19 +26,19 @@ protected:
                               FActorComponentTickFunction* ThisTickFunction) override;
 
 public:
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Buoyancy")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Buoyancy", meta = (ClampMin = "0.0"))
     float WaterDensity = 1000.0f;
     
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Buoyancy")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Buoyancy", meta = (ClampMin = "0.0"))
     float BuoyancyForceMultiplier = 1.0f;
     
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Box Collision")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Box Collision", meta = (ClampMin = "2"))
     int32 PointsPerAxis = 3;
     
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damping")
-    float LinearDamping = 1.f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damping", meta = (ClampMin = "0.0"))
+    float LinearDamping = 2.f;
     
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damping")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damping", meta = (ClampMin = "0.0"))
     float AngularDamping = 20.f;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
@@ -61,19 +61,10 @@ public:
 
 private:
     UPROPERTY()
-    UBoxComponent* BoxComponent;
-    
-    UPROPERTY()
-    USphereComponent* SphereComponent;
-
-    UPROPERTY()
-    UStaticMeshComponent* StaticMeshComponent;
-
-    UPROPERTY()
-    UCapsuleComponent* CapsuleComponent;
-    
-    UPROPERTY()
     TArray<FVector> BuoyancyPoints;
+
+    UPROPERTY()
+    UPrimitiveComponent* PhysicsComp = nullptr;
     
     void GenerateBuoyancyPoints();
     void GenerateBoxBuoyancyPoints();
