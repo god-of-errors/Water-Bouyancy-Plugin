@@ -118,6 +118,9 @@ void UWaterPhysicsComponent::BeginPlay()
         return;
     }
     
+    PhysicsComp->SetAngularDamping(AngularDamping);
+    PhysicsComp->SetLinearDamping(LinearDamping);
+    
     UE_LOG(LogTemp, Error, TEXT(" No BoxComponent, SphereComponent, StaticMeshComponent or CapsuleComponent found"));
     TArray<UActorComponent*> AllComponents;
     GetOwner()->GetComponents(AllComponents);
