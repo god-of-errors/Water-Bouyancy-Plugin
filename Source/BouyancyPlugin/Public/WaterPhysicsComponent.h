@@ -39,7 +39,7 @@ public:
     float LinearDamping = 2.f;
     
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damping", meta = (ClampMin = "0.0"))
-    float AngularDamping = 20.f;
+    float AngularDamping = 10.f;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
     bool bShowDebug = true;
